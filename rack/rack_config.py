@@ -20,7 +20,8 @@ REQUIRED_KEYS = {
     "bins",
 }
 # Optional because the 24-bin rack config predates them.
-OPTIONAL_KEYS = {"unit_style"}
+OPTIONAL_KEYS = {"unit_style", "color_order"}
+COLOR_ORDERS = {"RGB", "GRB"}
 
 
 class RackConfigError(ValueError):
@@ -34,6 +35,8 @@ def validate_rack_config(config: object) -> dict:
         raise RackConfigError("invalid_rack_config")
     if config.get("unit_style", "bin_rack") not in UNIT_STYLES:
         raise RackConfigError("invalid_unit_style")
+    if config.get("color_order", "RGB") not in COLOR_ORDERS:
+        raise RackConfigError("invalid_color_order")
     if config["version"] != 1:
         raise RackConfigError("unsupported_version")
     for key in ("rack_id", "display_name", "endpoint", "topic_prefix"):
@@ -78,6 +81,11 @@ def load_rack_config(path: Path) -> dict:
     except (OSError, json.JSONDecodeError) as exc:
         raise RackConfigError("unreadable_rack_config") from exc
     return validate_rack_config(raw)
+
+
+def color_order(config: dict) -> str:
+    """Byte order the string expects on the wire. Plans stay in intent RGB; the swap happens at publish."""
+    return config.get("color_order", "RGB")
 
 
 def bin_ids(config: dict) -> list[str]:

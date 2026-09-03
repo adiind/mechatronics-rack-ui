@@ -81,7 +81,7 @@ class RackServerApiTests(unittest.TestCase):
         status, payload = self.request("/api/rack")
         self.assertEqual(status, 200)
         self.assertEqual(payload["rack"]["rack_id"], "rack-01")
-        self.assertEqual(len(payload["bins"]), 24)
+        self.assertEqual(len(payload["bins"]), 42)
 
     def test_search_returns_results_and_count(self):
         status, payload = self.request("/api/search?q=esp32")

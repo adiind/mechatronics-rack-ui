@@ -44,7 +44,7 @@ class RackSearchTests(unittest.TestCase):
         self.assertEqual(result["item_id"], "esp32-c6")
         self.assertEqual(result["location_count"], 2)
         self.assertEqual([entry["bin_id"] for entry in result["locations"]], ["bin-07", "bin-12"])
-        self.assertEqual([entry["led_index"] for entry in result["locations"]], [6, 11])
+        self.assertEqual([entry["led_index"] for entry in result["locations"]], [35, 30])
 
     def test_exact_item_id_ranks_above_a_note_match(self):
         results = search_items(self.inventory, self.config, query="esp32-c6")

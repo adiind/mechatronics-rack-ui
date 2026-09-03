@@ -61,6 +61,21 @@
           <p id="highlight-banner" class="banner" role="status" aria-live="polite" hidden></p>
         </div>
 
+        <section id="chat-panel" class="chat" aria-label="Ask the rack">
+          <div class="chat-head">
+            <h2>Ask the rack</h2>
+            <span id="chat-status" class="muted">checking…</span>
+          </div>
+          <ol id="chat-log" class="chat-log" aria-live="polite" aria-label="Conversation"></ol>
+          <form id="chat-form" class="chat-form">
+            <textarea id="chat-input" rows="2" placeholder="e.g. Where is the stepper driver? or What can I build a line-following robot with?" aria-label="Your question" maxlength="2000"></textarea>
+            <div class="chat-controls">
+              <label class="chat-toggle"><input id="chat-light" type="checkbox" checked /> Light matching bins</label>
+              <button id="chat-send" type="submit">Ask</button>
+            </div>
+          </form>
+        </section>
+
         <div id="bin-detail" class="detail" aria-live="polite">Click a drawer to see what is in it.</div>
 
         <ul id="result-list" class="results"></ul>

@@ -23,8 +23,8 @@ def seed_config():
         "endpoint": "mechatronics-rack-01",
         "topic_prefix": "ledwall/node01",
         "pixel_count": 24,
-        "rows": 6,
-        "columns": 4,
+        "rows": 4,
+        "columns": 6,
         "origin": "top-left",
         "bins": [{"bin_id": f"bin-{index + 1:02d}", "led_index": index} for index in range(24)],
     }
@@ -40,13 +40,13 @@ class RackConfigTests(unittest.TestCase):
     def test_grid_position_is_row_major_zero_based(self):
         config = validate_rack_config(seed_config())
         self.assertEqual(grid_position(config, "bin-01"), (0, 0))
-        self.assertEqual(grid_position(config, "bin-05"), (1, 0))
-        self.assertEqual(grid_position(config, "bin-24"), (5, 3))
+        self.assertEqual(grid_position(config, "bin-07"), (1, 0))
+        self.assertEqual(grid_position(config, "bin-24"), (3, 5))
 
     def test_neighbors_stay_inside_the_grid(self):
         config = validate_rack_config(seed_config())
-        self.assertEqual(sorted(neighbor_bins(config, "bin-01")), ["bin-02", "bin-05"])
-        self.assertEqual(sorted(neighbor_bins(config, "bin-06")), ["bin-02", "bin-05", "bin-07", "bin-10"])
+        self.assertEqual(sorted(neighbor_bins(config, "bin-01")), ["bin-02", "bin-07"])
+        self.assertEqual(sorted(neighbor_bins(config, "bin-08")), ["bin-02", "bin-07", "bin-09", "bin-14"])
 
     def test_duplicate_led_index_is_rejected(self):
         config = seed_config()
@@ -81,9 +81,10 @@ class RackConfigTests(unittest.TestCase):
             config = load_rack_config(config_path)
             self.assertEqual(config["rack_id"], "rack-01")
             self.assertEqual(config["topic_prefix"], "ledwall/node01")
-            self.assertEqual(config["pixel_count"], 24)
-            self.assertEqual(len(config["bins"]), 24)
+            self.assertEqual(config["pixel_count"], 42)
+            self.assertEqual(len(config["bins"]), 42)
+            self.assertEqual(config["color_order"], "GRB")
             inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
             self.assertEqual(inventory["items"], [])
-            self.assertEqual(len(inventory["bins"]), 24)
+            self.assertEqual(len(inventory["bins"]), 42)
             self.assertEqual(inventory["bins"]["rack-01/bin-01"]["state"], "unknown")

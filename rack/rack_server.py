@@ -16,6 +16,7 @@ from urllib.parse import parse_qs, urlparse
 
 from rack.inventory_store import InventoryError
 from rack.mqtt_transport import MqttTransport, RecordingTransport, TransportError, load_client_config
+from rack.rack_chat import DEFAULT_FALLBACK_MODELS, ChatError, ChatService, GeminiClient, load_gemini_key
 from rack.rack_config import RackConfigError, load_rack_config
 from rack.rack_service import RackService
 
@@ -36,10 +37,11 @@ class OperatorAuthError(Exception):
 class RackHTTPServer(ThreadingHTTPServer):
     allow_reuse_address = True
 
-    def __init__(self, address, handler, service: RackService, static_root: Path):
+    def __init__(self, address, handler, service: RackService, static_root: Path, chat: ChatService | None = None):
         super().__init__(address, handler)
         self.service = service
         self.static_root = Path(static_root).resolve()
+        self.chat = chat or ChatService(service, None)
 
 
 class RackHandler(BaseHTTPRequestHandler):
@@ -113,7 +115,13 @@ class RackHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/health":
                 self._send_json(
-                    200, {"ok": True, "endpoint_availability": service.snapshot()["endpoint_availability"]}
+                    200,
+                    {
+                        "ok": True,
+                        "endpoint_availability": service.snapshot()["endpoint_availability"],
+                        "chat": self.server.chat.enabled,
+                        "chat_model": self.server.chat.model,
+                    },
                 )
                 return
             if path == "/api/audit":
@@ -149,6 +157,16 @@ class RackHandler(BaseHTTPRequestHandler):
                     raise ValueError("ttl_seconds must be between 1 and 300")
                 self._send_json(200, service.locate(item_ids, ttl_seconds=ttl))
                 return
+            if path == "/api/chat":
+                payload = self._body()
+                light = payload.get("light", True)
+                if not isinstance(light, bool):
+                    raise ValueError("light must be a boolean")
+                self._send_json(
+                    200,
+                    self.server.chat.answer(payload.get("message"), history=payload.get("history"), light=light),
+                )
+                return
             if path == "/api/locate/clear":
                 self._send_json(200, service.clear_highlight())
                 return
@@ -180,13 +198,21 @@ class RackHandler(BaseHTTPRequestHandler):
             self._send_json(400, {"error": str(exc)})
         except TransportError as exc:
             self._send_json(502, {"error": str(exc)})
+        except ChatError as exc:
+            self._send_json(503 if str(exc) == "chat_not_configured" else 502, {"error": str(exc)})
         except OSError as exc:
             self._send_json(500, {"error": f"could not apply change: {exc}"})
 
 
-def create_rack_server(host: str, port: int, service: RackService, static_root: Path | None = None) -> RackHTTPServer:
+def create_rack_server(
+    host: str,
+    port: int,
+    service: RackService,
+    static_root: Path | None = None,
+    chat: ChatService | None = None,
+) -> RackHTTPServer:
     root = Path(static_root or Path(__file__).resolve().parent / "static")
-    return RackHTTPServer((host, port), RackHandler, service, root)
+    return RackHTTPServer((host, port), RackHandler, service, root, chat)
 
 
 def _expiry_loop(service: RackService, stop: threading.Event) -> None:
@@ -201,6 +227,19 @@ def main() -> int:
     parser.add_argument("--data-dir", type=Path, default=Path(__file__).resolve().parents[1] / "data" / "rack")
     parser.add_argument("--config", type=Path, default=None, help="rack/cabinet config JSON; defaults to <data-dir>/rack-01.json")
     parser.add_argument("--client-config", type=Path, default=None, help="broker credential JSON; omit for dry run")
+    parser.add_argument(
+        "--gemini-env",
+        type=Path,
+        default=None,
+        help="env file holding GEMINI_API_KEY; defaults to ~/.config/mechatronics-rack-ui/gemini.env or $GEMINI_API_KEY",
+    )
+    parser.add_argument("--gemini-model", default=os.environ.get("GEMINI_MODEL", "gemini-3.6-flash"))
+    parser.add_argument(
+        "--gemini-fallback-models",
+        default=os.environ.get("GEMINI_FALLBACK_MODELS", ",".join(DEFAULT_FALLBACK_MODELS)),
+        help="comma-separated models tried when the primary is overloaded or retired",
+    )
+    parser.add_argument("--no-chat", action="store_true", help="serve without the Gemini chat panel")
     args = parser.parse_args()
 
     config = load_rack_config(args.config or args.data_dir / "rack-01.json")
@@ -211,7 +250,15 @@ def main() -> int:
         print("no --client-config: running dry, no MQTT commands leave this process", flush=True)
 
     service = RackService(config, args.data_dir / "inventory.json", args.data_dir / "audit.jsonl", transport)
-    server = create_rack_server(args.host, args.port, service)
+    gemini_key = None if args.no_chat else load_gemini_key(args.gemini_env)
+    if gemini_key:
+        fallbacks = [name.strip() for name in args.gemini_fallback_models.split(",") if name.strip()]
+        chat = ChatService(service, GeminiClient(gemini_key, model=args.gemini_model, fallback_models=fallbacks))
+        print(f"chat: enabled with {args.gemini_model} (fallbacks: {', '.join(fallbacks) or 'none'}); key stays in this process", flush=True)
+    else:
+        chat = ChatService(service, None)
+        print("chat: disabled (no GEMINI_API_KEY found)", flush=True)
+    server = create_rack_server(args.host, args.port, service, chat=chat)
     stop = threading.Event()
     sweeper = threading.Thread(target=_expiry_loop, args=(service, stop), daemon=True)
     sweeper.start()

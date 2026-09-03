@@ -589,6 +589,128 @@ function wireGridKeys() {
   });
 }
 
+/* Chat panel. The browser only ever posts plain text to /api/chat; the server
+   grounds the model in the inventory, re-validates every item id, and is the
+   only thing that can light a bin. */
+const chat = { history: [], busy: false, enabled: null };
+
+function chatTurn(role, text, extraClass) {
+  const log = document.getElementById('chat-log');
+  const li = document.createElement('li');
+  li.className = ['chat-turn', `from-${role}`, extraClass || ''].filter(Boolean).join(' ');
+  li.textContent = text;
+  log.appendChild(li);
+  log.scrollTop = log.scrollHeight;
+  return li;
+}
+
+function chatMatchChips(turn, result) {
+  if (!result.matches.length) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'chat-matches';
+  for (const match of result.matches) {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = match.locations.length ? 'chat-chip' : 'chat-chip is-unmapped';
+    chip.textContent = match.display_name;
+    const bin = document.createElement('span');
+    bin.className = 'chip-bin';
+    bin.textContent = match.locations.length ? match.locations.map((loc) => loc.split('/')[1]).join(', ') : 'no bin yet';
+    chip.appendChild(bin);
+    const firstBin = match.locations.length ? match.locations[0].split('/')[1] : null;
+    if (firstBin) {
+      chip.title = `Show ${firstBin}`;
+      chip.addEventListener('click', () => {
+        state.activeBin = firstBin;
+        showBinDetail(firstBin);
+        paintCells();
+      });
+    } else {
+      chip.disabled = true;
+    }
+    wrap.appendChild(chip);
+  }
+  turn.appendChild(wrap);
+  const note = document.createElement('div');
+  note.className = 'chat-lit';
+  if (result.lit.length) {
+    note.textContent = `Lit ${result.lit.map((entry) => shortLabel(entry.bin_id)).join(', ')} on the rack for ${result.expires_in}s.`;
+  } else if (result.unmapped.length && result.unmapped.length === result.matches.length) {
+    note.textContent = 'These parts are stocked but not yet placed in a numbered bin, so nothing was lit.';
+  } else if (!document.getElementById('chat-light').checked) {
+    note.textContent = 'Lights were left off (toggle above).';
+  }
+  if (note.textContent) turn.appendChild(note);
+}
+
+async function chatSend(event) {
+  event.preventDefault();
+  if (chat.busy || chat.enabled === false) return;
+  const input = document.getElementById('chat-input');
+  const message = input.value.trim();
+  if (!message) return;
+  chat.busy = true;
+  document.getElementById('chat-send').disabled = true;
+  input.value = '';
+  chatTurn('user', message);
+  const pending = chatTurn('assistant', 'Checking the rack…', 'is-pending');
+  try {
+    const result = await api('/api/chat', {
+      method: 'POST',
+      body: JSON.stringify({
+        message,
+        history: chat.history.slice(-10),
+        light: document.getElementById('chat-light').checked,
+      }),
+    });
+    pending.classList.remove('is-pending');
+    pending.textContent = result.reply;
+    chatMatchChips(pending, result);
+    chat.history.push({ role: 'user', text: message }, { role: 'assistant', text: result.reply });
+    if (result.lit.length) await refreshSnapshot();
+  } catch (error) {
+    pending.classList.remove('is-pending');
+    pending.classList.add('is-error');
+    const reasons = {
+      chat_not_configured: 'The assistant is not configured on this server.',
+      chat_upstream_busy: 'The assistant is busy right now. Try again in a moment.',
+      chat_upstream_unreachable: 'The assistant could not reach its model service.',
+      chat_upstream_rejected: 'The model service rejected the request. An operator needs to check the server.',
+      chat_upstream_unparseable: 'The assistant gave an unreadable answer. Please rephrase and try again.',
+    };
+    pending.textContent = reasons[error.message] || `Something went wrong: ${error.message}`;
+  } finally {
+    chat.busy = false;
+    document.getElementById('chat-send').disabled = false;
+    input.focus();
+  }
+}
+
+async function chatProbe() {
+  const status = document.getElementById('chat-status');
+  const panel = document.getElementById('chat-panel');
+  try {
+    const health = await api('/api/health');
+    chat.enabled = Boolean(health.chat);
+    status.textContent = chat.enabled ? `answers only from the verified inventory · ${health.chat_model}` : 'assistant not configured on this server';
+  } catch (error) {
+    chat.enabled = false;
+    status.textContent = 'assistant unavailable';
+  }
+  panel.classList.toggle('is-disabled', !chat.enabled);
+}
+
+function startChat() {
+  document.getElementById('chat-form').addEventListener('submit', chatSend);
+  document.getElementById('chat-input').addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      document.getElementById('chat-form').requestSubmit();
+    }
+  });
+  chatProbe();
+}
+
 function start() {
   document.getElementById('search-input').addEventListener('input', debounce(runSearch, 200));
   document.getElementById('category-filter').addEventListener('change', runSearch);
@@ -602,6 +724,7 @@ function start() {
   refreshSnapshot();
   runSearch();
   startOperator();
+  startChat();
   wireGridKeys();
   setInterval(refreshSnapshot, 2000);
 }

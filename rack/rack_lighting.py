@@ -23,6 +23,19 @@ DEFAULT_TTL_SECONDS = 45
 BLACK = [0, 0, 0]
 
 
+def to_wire_rgb(rgb: list[int], order: str) -> list[int]:
+    """Reorder an intent-RGB triple for a string whose firmware passes bytes through unswapped."""
+    if order == "GRB":
+        return [rgb[1], rgb[0], rgb[2]]
+    return list(rgb)
+
+
+def wire_command(command: dict, order: str) -> dict:
+    if "rgb" not in command or order == "RGB":
+        return command
+    return {**command, "rgb": to_wire_rgb(command["rgb"], order)}
+
+
 def color_for_slot(slot: int) -> list[int]:
     return list(SELECTION_COLORS[slot % len(SELECTION_COLORS)])
 

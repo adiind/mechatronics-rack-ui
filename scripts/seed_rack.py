@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Write a valid empty rack config and inventory record."""
+"""Write a valid empty rack config and inventory record for rack-01.
+
+Geometry (decisions 2026-09-03): 7 rows x 6 columns of bins numbered row-major
+from the top-left; the LED string is wired serpentine starting bottom-left; the
+WS2811 modules take GRB byte order. The physical Uline rack has 4 rows of 6, the
+extra rows hold parts the string will grow into.
+"""
 
 from __future__ import annotations
 
@@ -8,7 +14,20 @@ from pathlib import Path
 
 from rack.storage import atomic_write_json
 
-BIN_COUNT = 24
+ROWS = 7
+COLUMNS = 6
+BIN_COUNT = ROWS * COLUMNS
+
+
+def serpentine_led_index(row: int, column: int, *, rows: int = ROWS, columns: int = COLUMNS) -> int:
+    """LED index for a grid position when the string starts bottom-left and snakes upward.
+
+    Physical row 0 is the bottom row and runs left to right; each row above
+    reverses direction. `row` is counted from the top (bin-01 is top-left).
+    """
+    physical_row = rows - 1 - row
+    offset = column if physical_row % 2 == 0 else columns - 1 - column
+    return physical_row * columns + offset
 
 
 def seed_rack_config() -> dict:
@@ -18,11 +37,16 @@ def seed_rack_config() -> dict:
         "display_name": "Mechatronics rack 01",
         "endpoint": "mechatronics-rack-01",
         "topic_prefix": "ledwall/node01",
-        "pixel_count": 24,
-        "rows": 6,
-        "columns": 4,
+        "pixel_count": BIN_COUNT,
+        "rows": ROWS,
+        "columns": COLUMNS,
         "origin": "top-left",
-        "bins": [{"bin_id": f"bin-{index + 1:02d}", "led_index": index} for index in range(BIN_COUNT)],
+        "color_order": "GRB",
+        "bins": [
+            {"bin_id": f"bin-{row * COLUMNS + column + 1:02d}", "led_index": serpentine_led_index(row, column)}
+            for row in range(ROWS)
+            for column in range(COLUMNS)
+        ],
     }
 
 

@@ -12,7 +12,8 @@ from pathlib import Path
 from rack.inventory_csv import diff_inventory, export_csv_text, parse_csv
 from rack.inventory_store import apply_update, append_audit, bin_occupancy, load_inventory, save_inventory
 from rack.mqtt_transport import command_topic
-from rack.rack_lighting import DEFAULT_TTL_SECONDS, build_locate_plan, build_preview_plan, clear_command
+from rack.rack_config import color_order
+from rack.rack_lighting import DEFAULT_TTL_SECONDS, build_locate_plan, build_preview_plan, clear_command, wire_command
 from rack.rack_search import search_items
 
 PREVIEW_TTL_SECONDS = 5
@@ -45,12 +46,13 @@ class RackService:
 
     def _publish_plan(self, plan: dict) -> None:
         topic = command_topic(self._config)
+        order = color_order(self._config)
         for frame in plan["frames"]:
             # Frames are milliseconds apart; the ripple is a courtesy, not a
             # correctness requirement, so a slow broker must never block a
             # request. Send them back to back and let the string catch up.
             for command in frame["commands"]:
-                self._transport.publish(topic, command)
+                self._transport.publish(topic, wire_command(command, order))
 
     def _start_highlight(self, plan: dict, kind: str) -> dict:
         session_id = uuid.uuid4().hex
@@ -118,6 +120,11 @@ class RackService:
                 "expires_in": PREVIEW_TTL_SECONDS,
                 "lit": plan["lit"],
             }
+
+    def inventory_snapshot(self) -> dict:
+        """A copy of the verified inventory record for read-only consumers such as chat."""
+        with self._lock:
+            return json.loads(json.dumps(self._inventory))
 
     def snapshot(self) -> dict:
         with self._lock:
