@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mechatronics rack</title>
+    <link rel="stylesheet" href="/rack.css" />
+  </head>
+  <body>
+    <header class="page-head">
+      <div>
+        <p class="kicker">Mechatronics</p>
+        <h1 id="rack-title">Mechatronics rack</h1>
+        <p id="rack-subtitle" class="subtitle"></p>
+      </div>
+      <div class="endpoint" id="endpoint-status" aria-live="polite">Rack lights: checking</div>
+    </header>
+
+    <main class="layout">
+      <section class="unit" aria-label="Rack positions">
+        <div class="cabinet">
+          <div class="cabinet-shell">
+            <div id="rack-grid" class="grid" role="grid" aria-label="Rack bins"></div>
+          </div>
+          <div class="cabinet-foot"></div>
+        </div>
+        <ul id="legend" class="legend"></ul>
+      </section>
+
+      <section class="side">
+        <div class="finder" aria-label="Find equipment">
+          <div class="filters">
+            <input id="search-input" type="search" placeholder="Search by name, id, or note" aria-label="Search inventory" />
+            <select id="category-filter" aria-label="Category">
+              <option value="">All categories</option>
+              <option value="control_prototyping">Control &amp; prototyping</option>
+              <option value="inputs_sensing">Inputs &amp; sensing</option>
+              <option value="actuators_outputs">Actuators &amp; outputs</option>
+              <option value="drivers_power_electronics">Drivers, power &amp; electronics</option>
+              <option value="mechanisms_build_hardware">Mechanisms &amp; build hardware</option>
+              <option value="material">Material</option>
+              <option value="electronic_part">Electronic part</option>
+              <option value="tool">Tool</option>
+              <option value="machine">Machine</option>
+              <option value="consumable">Consumable</option>
+            </select>
+            <select id="availability-filter" aria-label="Availability">
+              <option value="">Any availability</option>
+              <option value="available">Available</option>
+              <option value="checked_out">Checked out</option>
+              <option value="depleted">Depleted</option>
+              <option value="maintenance">Maintenance</option>
+              <option value="unknown">Unknown</option>
+            </select>
+          </div>
+          <div class="actions">
+            <button id="locate-selected" type="button">Locate selected</button>
+            <button id="clear-highlight" type="button">Turn lights off</button>
+            <span id="result-count" class="muted"></span>
+          </div>
+          <p id="highlight-banner" class="banner" role="status" aria-live="polite" hidden></p>
+        </div>
+
+        <div id="bin-detail" class="detail" aria-live="polite">Click a drawer to see what is in it.</div>
+
+        <ul id="result-list" class="results"></ul>
+
+        <details id="overflow-block" class="overflow" hidden>
+          <summary><span id="overflow-count"></span></summary>
+          <ul id="overflow-list" class="results"></ul>
+        </details>
+      </section>
+    </main>
+
+    <section id="operator-panel" class="operator" aria-label="Operator edit mode">
+      <h2>Edit mode</h2>
+      <div class="unlock">
+        <input id="operator-token" type="password" placeholder="Operator token" aria-label="Operator token" />
+        <button id="operator-unlock" type="button">Unlock editing</button>
+        <span id="operator-error" class="muted" role="alert"></span>
+      </div>
+      <div id="operator-body" hidden>
+        <div class="edit-row">
+          <span id="edit-bin-label">No bin selected</span>
+          <select id="edit-item" aria-label="Item to assign"></select>
+          <button id="preview-bin" type="button">Preview this bin</button>
+          <button id="assign-item" type="button" disabled>Assign here</button>
+          <button id="clear-bin" type="button">Mark empty</button>
+          <button id="mark-unknown" type="button">Mark unknown</button>
+        </div>
+        <div class="edit-row">
+          <button id="csv-export" type="button">Export CSV</button>
+          <textarea id="csv-export-text" rows="3" aria-label="Exported CSV"></textarea>
+        </div>
+        <div class="edit-row">
+          <textarea id="csv-import-text" rows="3" placeholder="Paste CSV to import" aria-label="CSV to import"></textarea>
+          <button id="csv-import-preview" type="button">Preview import</button>
+          <button id="csv-import-apply" type="button">Apply import</button>
+        </div>
+        <pre id="csv-diff" class="diff"></pre>
+        <h3>Recent changes</h3>
+        <ul id="audit-list" class="audit"></ul>
+      </div>
+    </section>
+    <script src="/rack.js"></script>
+  </body>
+</html>
