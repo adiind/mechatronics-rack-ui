@@ -1,0 +1,30 @@
+{
+  "printer3": {
+    "node": "node02",
+    "pixels": 100
+  },
+  "printer1": {
+    "node": "node03",
+    "pixels": 100
+  },
+  "printer2": {
+    "node": "node04",
+    "pixels": 100
+  },
+  "printer4": {
+    "node": "node05",
+    "pixels": 100
+  },
+  "printer5": {
+    "node": "node06",
+    "pixels": 100
+  },
+  "printer6": {
+    "node": "node07",
+    "pixels": 100
+  },
+  "printer7": {
+    "node": "node08",
+    "pixels": 100
+  }
+}

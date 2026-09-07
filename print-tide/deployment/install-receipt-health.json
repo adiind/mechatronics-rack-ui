@@ -1,0 +1,6 @@
+{
+  "installed_at": "2026-09-06 16:03:50 CDT",
+  "change": "rope health (acks + retained status) + BRIGHT_CAP 252",
+  "backup_glob": "/home/edi/printer-led-mcp/server.py.pre-health-*",
+  "status": "installed"
+}

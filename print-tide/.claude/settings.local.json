@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(systemctl --user --no-block restart printer-led-mcp.service)",
+      "Bash(echo \"enqueued rc=$?\")"
+    ]
+  }
+}

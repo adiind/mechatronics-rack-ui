@@ -1,0 +1,392 @@
+"""Renderer: bounds, determinism, state distinctness, ripple order and priority."""
+import unittest
+
+from light_studio.layout import DEFAULTS
+from light_studio.model import STATES
+from light_studio.renderer import (ACCENT_POSITIONS, ALARM_FLOOR, BRIGHT_CAP,
+                                   CELEBRATE_SECONDS, IDENTIFY_SECONDS, PIXELS,
+                                   QUANT, RIPPLE_DELAY, RIPPLE_SECONDS,
+                                   SPLASH_SECONDS, STATUS_POSITIONS,
+                                   droplet_timing, render_rope)
+
+
+def brightness(frame):
+    return sum(sum(px) for px in frame)
+
+
+def event(at=0.0, position=0, kind='complete'):
+    return [{'at': at, 'position': position, 'kind': kind, 'printer': 'printer1'}]
+
+
+class BoundsTests(unittest.TestCase):
+    def test_every_state_is_in_range_quantized_and_the_right_length(self):
+        for state in STATES:
+            for percent in (None, 0, 37.5, 100):
+                for t in (0.0, 1.3, 7.7, 91.25):
+                    frame = render_rope(state, percent, t, 3, {'brightness': 100})
+                    self.assertEqual(len(frame), STATUS_POSITIONS, state)
+                    for pixel in frame:
+                        self.assertEqual(len(pixel), 3)
+                        for channel in pixel:
+                            self.assertIsInstance(channel, int)
+                            self.assertGreaterEqual(channel, 0)
+                            self.assertLessEqual(channel, BRIGHT_CAP)
+                            self.assertEqual(channel % QUANT, 0)
+
+    def test_an_unrecognized_state_renders_as_unknown_not_as_an_exception(self):
+        self.assertEqual(render_rope('banana', None, 1.0, 0),
+                         render_rope('unknown', None, 1.0, 0))
+
+    def test_rendering_is_deterministic(self):
+        args = ('printing', 61.0, 12.5, 4, {'speed': 1.5}, event(12.0, 1))
+        self.assertEqual(render_rope(*args), render_rope(*args))
+
+    def test_brightness_zero_is_dark_and_uses_the_off_shaped_frame(self):
+        frame = render_rope('idle', None, 2.0, 0, {'brightness': 0})
+        self.assertEqual(brightness(frame), 0)
+
+    def test_pixel_count_is_configurable_but_must_be_positive(self):
+        self.assertEqual(len(render_rope('idle', None, 0, 0, pixels=20)), 20)
+        with self.assertRaises(ValueError):
+            render_rope('idle', None, 0, 0, pixels=0)
+
+
+class DistinctnessTests(unittest.TestCase):
+    def test_all_eight_states_look_different_at_the_same_instant(self):
+        # 'finished' deliberately rests in the same cyan as 'idle' once its
+        # rainbow is over, so it is sampled mid-celebration here.
+        seen = {}
+        for state in STATES:
+            since = 1.0 if state == 'finished' else None
+            frame = tuple(tuple(p) for p in render_rope(state, 50, 3.0, 0,
+                                                        {'brightness': 100},
+                                                        since_complete=since))
+            self.assertNotIn(frame, seen, f'{state} looks identical to {seen.get(frame)}')
+            seen[frame] = state
+
+    def test_error_and_pause_are_not_mistakable_for_idle(self):
+        idle = render_rope('idle', None, 3.0, 0)
+        for state in ('error', 'paused'):
+            frame = render_rope(state, None, 3.0, 0)
+            # Alarms are red-dominant; idle water is blue-dominant.
+            self.assertGreater(sum(p[0] for p in frame), sum(p[2] for p in frame), state)
+            self.assertLess(sum(p[0] for p in idle), sum(p[2] for p in idle))
+
+    def test_offline_is_dim_and_never_shows_a_progress_edge(self):
+        offline = render_rope('offline', None, 0.5, 0, {'brightness': 100})
+        printing = render_rope('printing', 50, 0.5, 0, {'brightness': 100})
+        self.assertLess(brightness(offline), brightness(printing))
+        self.assertEqual(len({tuple(p) for p in offline[:40]}
+                             & {tuple(p) for p in offline[60:]}), 1)
+
+    def test_unknown_is_neutral_grey_not_the_purple_offline_heartbeat(self):
+        unknown = render_rope('unknown', None, 1.0, 0, {'brightness': 100})
+        offline = render_rope('offline', None, 0.1, 0, {'brightness': 100})
+        self.assertGreater(sum(p[2] for p in offline), sum(p[0] for p in offline))
+        lit = [p for p in unknown if sum(p) > 0]
+        self.assertTrue(lit)
+        for pixel in lit:                      # grey: channels within one step
+            self.assertLessEqual(max(pixel) - min(pixel), QUANT * 3)
+
+
+class ProgressTests(unittest.TestCase):
+    def test_the_waterline_moves_with_the_percentage(self):
+        def waterline(percent):
+            frame = render_rope('printing', percent, 0.0, 0,
+                                {'reduced_motion': True, 'brightness': 100})
+            green = [i for i, p in enumerate(frame) if p[1] > p[2]]
+            return max(green) if green else -1
+        self.assertLess(waterline(10), waterline(50))
+        self.assertLess(waterline(50), waterline(90))
+
+    def test_zero_percent_and_unknown_percent_do_not_render_the_same(self):
+        zero = render_rope('printing', 0, 1.0, 0, {'reduced_motion': True})
+        unknown = render_rope('printing', None, 1.0, 0, {'reduced_motion': True})
+        self.assertNotEqual(zero, unknown)
+
+    def test_full_progress_fills_the_rope(self):
+        frame = render_rope('printing', 100, 0.0, 0,
+                            {'reduced_motion': True, 'brightness': 100})
+        self.assertTrue(all(p[1] > 0 for p in frame))
+
+    def test_droplets_only_fall_while_there_is_room_above_the_waterline(self):
+        moving = {tuple(tuple(p) for p in render_rope('printing', 20, t, 0))
+                  for t in (0.1, 0.4, 0.7, 1.0)}
+        self.assertGreater(len(moving), 1)
+
+    def test_the_droplet_cycle_always_outlasts_the_fall_and_the_splash(self):
+        """Regression: a fixed 2 s cycle silently broke below ~40% progress.
+
+        With a 90-position region an empty bucket needs ~3 s of falling, so the
+        droplet used to reset in mid-air and never land.
+        """
+        for travel in range(0, STATUS_POSITIONS):
+            fall, cycle = droplet_timing(travel)
+            self.assertGreaterEqual(cycle, fall + SPLASH_SECONDS, travel)
+            self.assertGreater(cycle, 0)
+
+    def test_a_droplet_falls_through_the_red_and_reaches_the_waterline(self):
+        """The drop is green, lives only above the waterline, and lands."""
+        settings = {'brightness': 100}
+        for percent in (0, 3, 12, 25, 50, 90):
+            fill = round(percent / 100 * STATUS_POSITIONS)
+            _, cycle = droplet_timing((STATUS_POSITIONS - 1) - fill)
+            seen = []
+            steps = 600
+            for step in range(steps):
+                frame = render_rope('printing', percent, step * cycle / steps, 0,
+                                    settings)
+                # A green pixel sitting inside the red remainder is the drop.
+                drops = [i for i in range(fill, STATUS_POSITIONS)
+                         if frame[i][1] > frame[i][0]]
+                if drops:
+                    seen.append(min(drops))
+            if fill >= STATUS_POSITIONS - 3:
+                continue                      # no room above the waterline
+            self.assertTrue(seen, f'no droplet at {percent}%')
+            self.assertLessEqual(min(seen), fill + 2,
+                                 f'droplet never reached the waterline at {percent}%')
+            self.assertGreater(max(seen), fill + 5,
+                               f'droplet never started high at {percent}%')
+
+
+class RedGreenTests(unittest.TestCase):
+    """The original NodeAnimator visual language for a running print."""
+
+    def bar(self, percent, t=0.0, **settings):
+        return render_rope('printing', percent, t, 0,
+                           dict({'brightness': 100, 'reduced_motion': True},
+                                **settings))
+
+    def test_zero_percent_is_entirely_red(self):
+        frame = self.bar(0)
+        self.assertEqual(len(set(tuple(p) for p in frame)), 1)
+        red = frame[0]
+        self.assertGreater(red[0], 0)
+        self.assertEqual(red[1], 0)
+        self.assertEqual(red[2], 0)
+
+    def test_one_hundred_percent_is_entirely_green(self):
+        frame = self.bar(100)
+        self.assertEqual(len(set(tuple(p) for p in frame)), 1)
+        green = frame[0]
+        self.assertEqual(green[0], 0)
+        self.assertGreater(green[1], 0)
+
+    def test_the_bar_is_green_below_the_waterline_and_red_above(self):
+        for percent in (10, 25, 50, 75, 90):
+            frame = self.bar(percent)
+            fill = round(percent / 100 * STATUS_POSITIONS)
+            for i in range(fill):
+                self.assertGreater(frame[i][1], frame[i][0], (percent, i))
+            for i in range(fill, STATUS_POSITIONS):
+                self.assertGreater(frame[i][0], frame[i][1], (percent, i))
+
+    def test_each_zone_is_a_single_solid_colour(self):
+        frame = self.bar(50)
+        fill = round(0.5 * STATUS_POSITIONS)
+        self.assertEqual(len(set(tuple(p) for p in frame[:fill])), 1)
+        self.assertEqual(len(set(tuple(p) for p in frame[fill:])), 1)
+
+    def test_no_pixel_of_a_printing_rope_is_ever_dark(self):
+        """The old blue remainder quantized to near-black and read as 'off'."""
+        for percent in (0, 5, 27, 50, 99, 100):
+            for t in (0.0, 0.7, 2.3, 5.5):
+                for pixel in render_rope('printing', percent, t, 0,
+                                         {'brightness': 100}):
+                    self.assertGreater(sum(pixel), 40, (percent, t, pixel))
+
+    def test_a_solid_bar_costs_only_two_messages(self):
+        """Two contiguous runs is why the original never hit its budget."""
+        frame = self.bar(40)
+        runs = 1 + sum(1 for a, b in zip(frame, frame[1:]) if a != b)
+        self.assertEqual(runs, 2)
+
+
+class MotionTests(unittest.TestCase):
+    def test_idle_is_a_still_uniform_cyan(self):
+        # The resting state is deliberately static: no motion, no transport cost.
+        frames = {tuple(tuple(p) for p in render_rope('idle', None, t, 0))
+                  for t in (0.0, 0.7, 1.4, 2.1, 2.8)}
+        self.assertEqual(len(frames), 1)
+        frame = render_rope('idle', None, 1.0, 0)
+        self.assertEqual(len({tuple(p) for p in frame}), 1)
+        r, g, b = frame[0]
+        self.assertEqual(r, 0)
+        self.assertGreater(b, 100)
+        self.assertGreater(g, 100)
+
+    def test_idle_ignores_speed_and_position(self):
+        slow = render_rope('idle', None, 4.0, 0, {'speed': 0.25})
+        fast = render_rope('idle', None, 4.0, 3, {'speed': 2.0})
+        self.assertEqual(slow, fast)
+
+    def test_quiet_mode_dims_idle_a_lot(self):
+        loud = render_rope('idle', None, 1.0, 0, {'brightness': 100, 'quiet': False})
+        quiet = render_rope('idle', None, 1.0, 0, {'brightness': 100, 'quiet': True})
+        self.assertLess(brightness(quiet), brightness(loud) * 0.4)
+
+    def test_alarms_keep_a_visibility_floor_under_quiet_and_low_brightness(self):
+        for state in ('error', 'paused'):
+            dim = render_rope(state, None, 1.0, 0, {'brightness': 1, 'quiet': True})
+            self.assertGreater(max(max(p) for p in dim), BRIGHT_CAP * ALARM_FLOOR * 0.5,
+                               state)
+
+    def test_quiet_mode_does_not_hide_an_error_behind_idle(self):
+        idle = render_rope('idle', None, 1.0, 0, {'quiet': True})
+        error = render_rope('error', None, 1.0, 0, {'quiet': True})
+        self.assertGreater(brightness(error), brightness(idle))
+
+
+class RippleTests(unittest.TestCase):
+    def test_a_ripple_reaches_a_near_bay_before_a_far_bay(self):
+        at, t = 0.0, RIPPLE_DELAY * 1.5
+        self.assertNotEqual(render_rope('idle', None, t, 0, {}, event(at, 0)),
+                            render_rope('idle', None, t, 0, {}, []))
+        self.assertEqual(render_rope('idle', None, t, 6, {}, event(at, 0)),
+                         render_rope('idle', None, t, 6, {}, []))
+
+    def test_a_ripple_expires_and_does_not_linger(self):
+        late = RIPPLE_SECONDS + 0.2
+        self.assertEqual(render_rope('idle', None, late, 0, {}, event(0.0, 0)),
+                         render_rope('idle', None, late, 0, {}, []))
+
+    def test_ripples_never_touch_error_pause_offline_or_unknown(self):
+        for state in ('error', 'paused', 'offline', 'unknown'):
+            plain = render_rope(state, 50, 0.3, 0, {}, [])
+            rippled = render_rope(state, 50, 0.3, 0, {}, event(0.0, 0))
+            self.assertEqual(plain, rippled, state)
+
+    def test_a_ripple_does_not_erase_printing_progress(self):
+        def edge(frame):
+            return [i for i, p in enumerate(frame) if p[1] > p[2] + QUANT]
+        plain = render_rope('printing', 40, 0.3, 0, {'reduced_motion': False}, [])
+        rippled = render_rope('printing', 40, 0.3, 0, {}, event(0.0, 0))
+        self.assertNotEqual(plain, rippled)
+        self.assertTrue(edge(rippled))
+        self.assertLessEqual(abs(max(edge(rippled)) - max(edge(plain))), 4)
+
+    def test_the_ripple_toggle_and_reduced_motion_both_suppress_ripples(self):
+        for settings in ({'ripples': False}, {'reduced_motion': True}):
+            self.assertEqual(render_rope('idle', None, 0.2, 0, settings, event()),
+                             render_rope('idle', None, 0.2, 0, settings, []))
+
+
+class CelebrationTests(unittest.TestCase):
+    def test_a_fresh_completion_differs_from_the_steady_collect_signal(self):
+        fresh = render_rope('finished', 100, 1.0, 0, {}, since_complete=0.3)
+        steady = render_rope('finished', 100, 1.0, 0, {}, since_complete=None)
+        self.assertNotEqual(fresh, steady)
+
+    def test_celebration_is_a_uniform_rainbow_that_turns_and_ends_in_cyan(self):
+        seen = set()
+        one_cycle = CELEBRATE_SECONDS / 2          # RAINBOW_CYCLES turns in total
+        for k in range(6):
+            since = 0.25 + k * one_cycle / 6
+            frame = render_rope('finished', 100, 1.0, 0, {}, since_complete=since)
+            self.assertEqual(len({tuple(p) for p in frame}), 1, 'one hue per tick')
+            seen.add(tuple(frame[0]))
+        self.assertGreaterEqual(len(seen), 5, 'the hue must actually turn')
+        nearly = render_rope('finished', 100, 1.0, 0, {}, since_complete=CELEBRATE_SECONDS - 0.05)
+        rest = render_rope('finished', 100, 1.0, 0, {}, since_complete=None)
+        for a, b in zip(nearly, rest):
+            for x, y in zip(a, b):
+                self.assertLessEqual(abs(x - y), QUANT, 'cross-fade hands off to cyan with no visible step')
+        self.assertEqual(rest, render_rope('idle', None, 1.0, 0, {}),
+                         'finished rests in the same cyan as idle')
+
+    def test_the_celebration_is_bounded_and_settles_back_to_steady_green(self):
+        steady = render_rope('finished', 100, 5.0, 0, {}, since_complete=None)
+        after = render_rope('finished', 100, 5.0, 0, {},
+                            since_complete=CELEBRATE_SECONDS + 0.1)
+        self.assertEqual(steady, after)
+
+    def test_the_collect_signal_rests_in_cyan_with_no_red(self):
+        for since in (CELEBRATE_SECONDS - 0.01, CELEBRATE_SECONDS + 5, None):
+            frame = render_rope('finished', 100, 2.0, 0, {'brightness': 100},
+                                since_complete=since)
+            self.assertEqual(sum(p[0] for p in frame), 0, since)
+            self.assertGreater(sum(p[1] + p[2] for p in frame), 0, since)
+
+
+class IdentifyTests(unittest.TestCase):
+    def test_identify_overrides_whatever_the_printer_is_doing(self):
+        for state in STATES:
+            frame = render_rope(state, 50, 3.0, 0, {}, identify_age=0.5)
+            self.assertEqual(frame, render_rope('idle', None, 3.0, 0, {},
+                                                identify_age=0.5))
+
+    def test_identify_pulses_rather_than_holding_one_colour(self):
+        levels = {brightness(render_rope('idle', None, 0, 0, {}, identify_age=a))
+                  for a in (0.05, 0.35, 0.75, 1.3, 2.0)}
+        self.assertGreaterEqual(len(levels), 3)
+
+    def test_identify_stays_visible_in_quiet_mode(self):
+        quiet = render_rope('idle', None, 0, 0, {'quiet': True, 'brightness': 5},
+                            identify_age=0.35)
+        self.assertGreater(max(max(p) for p in quiet), BRIGHT_CAP * 0.3)
+
+    def test_identify_age_is_clamped_to_its_bounded_window(self):
+        frame = render_rope('idle', None, 0, 0, {}, identify_age=IDENTIFY_SECONDS + 5)
+        self.assertEqual(len(frame), STATUS_POSITIONS)
+
+
+class TransportFriendlinessTests(unittest.TestCase):
+    """The renderer is written to be cheap to transmit; hold it to that."""
+
+    def _runs(self, frame):
+        count = 1
+        for a, b in zip(frame, frame[1:]):
+            if a != b:
+                count += 1
+        return count
+
+    def test_frames_stay_within_a_modest_number_of_colour_runs(self):
+        for state in STATES:
+            for t in (0.0, 1.1, 2.7):
+                frame = render_rope(state, 43, t, 0, dict(DEFAULTS, brightness=100))
+                self.assertLessEqual(self._runs(frame), 34, (state, t))
+
+    def test_consecutive_frames_differ_in_only_a_few_runs(self):
+        for state in STATES:
+            a = render_rope(state, 43, 2.000, 0, dict(DEFAULTS, brightness=100))
+            b = render_rope(state, 43, 2.125, 0, dict(DEFAULTS, brightness=100))
+            changed = 0
+            i = 0
+            while i < STATUS_POSITIONS:
+                j = i + 1
+                while j < STATUS_POSITIONS and b[j] == b[i]:
+                    j += 1
+                if any(a[k] != b[i] for k in range(i, j)):
+                    changed += 1
+                i = j
+            self.assertLessEqual(changed, 8, state)
+
+    def test_every_state_stays_under_the_sustained_message_budget(self):
+        """Regression for the torn 'random colours' rope of 2026-09-06.
+
+        The transport allows NODE_RATE messages/second per rope at TICK_HZ
+        ticks/second. A scene whose consecutive frames differ in more runs than
+        that, on average, is only partially applied each tick and the rope tears
+        into a patchwork. Hold every state to comfortably under the budget.
+        """
+        from light_studio import transport as tp
+        from light_studio.studio import TICK_HZ
+        per_tick_budget = tp.NODE_RATE / TICK_HZ          # 3 runs per tick
+        for state in STATES:
+            prev = None
+            changed = []
+            for k in range(160):
+                since = 999 if state == 'finished' else None
+                frame = render_rope(state, 42, k / TICK_HZ, 2,
+                                    dict(DEFAULTS, brightness=100), since_complete=since)
+                if prev is not None:
+                    changed.append(len(tp.diff_runs(prev, frame)))
+                prev = frame
+            mean = sum(changed) / len(changed)
+            self.assertLessEqual(mean, per_tick_budget * 0.75, (state, mean))
+            self.assertLessEqual(max(changed), tp.MAX_MSGS_PER_NODE_TICK, state)
+
+
+if __name__ == '__main__':
+    unittest.main()

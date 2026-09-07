@@ -97,3 +97,10 @@ This repository intentionally excludes real inventory records and audit logs,
 broker/OTA credentials, private handoffs, Raspberry Pi deployment material,
 firmware, screenshots, generated artifacts, and unrelated application code.
 No license is granted by this repository unless its owner adds one.
+
+## Print Tide (printer bay lighting)
+
+`print-tide/` holds the Pi-hosted renderer, mapping UI, rope health, ESPHome
+firmware configs and tests for the seven printer progress ropes. It runs as
+part of `printer-led-mcp.service` on the same Pi; see `print-tide/README.md`.
+`firmware/secrets.yaml` is deliberately absent; copy the `.example`.

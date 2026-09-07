@@ -1,0 +1,16 @@
+# Secrets — never commit (use firmware/secrets.yaml.example as the template)
+firmware/secrets.yaml
+
+# ESPHome build output
+firmware/.esphome/
+
+# Runtime state written by the live service (layout/lifecycle)
+data/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Logs
+*.log

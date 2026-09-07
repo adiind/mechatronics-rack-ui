@@ -1,0 +1,6 @@
+{
+  "at": "2026-09-05 22:45:09 CDT",
+  "reason": "User reported degraded live LED animation; restored exact pre-Print-Tide renderer",
+  "restored_from": "/home/edi/printer-led-mcp/server.py.pre-print-tide-20260905-214912",
+  "sha256": "d0a24c0da94558592affd9c661a8c50dd0b2dd7d3743e020126c019b79136d1b"
+}

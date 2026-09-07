@@ -1,0 +1,16 @@
+{
+  "flashed_at": "2026-09-06 16:59-17:19 CDT",
+  "change": "color_correct 55% -> 80%",
+  "nodes": [
+    "node02",
+    "node03",
+    "node04",
+    "node05",
+    "node06",
+    "node07",
+    "node08"
+  ],
+  "tool": "esphome 2026.8.2 in /home/edi/esphome-venv",
+  "source": "firmware/ledwall-node0N.yaml",
+  "result": "all OTA successful, all online + acked"
+}
