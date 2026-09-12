@@ -65,9 +65,15 @@ class StateTests(unittest.TestCase):
 
     def test_raw_states_map_without_inventing_stages(self):
         expected = {'RUNNING': 'printing', 'PREPARE': 'preparing', 'PAUSE': 'paused',
-                    'FINISH': 'finished', 'IDLE': 'idle', 'FAILED': 'error'}
+                    'FINISH': 'finished', 'IDLE': 'idle', 'FAILED': 'idle'}
         for raw, state in expected.items():
             self.assertEqual(normalize(report(raw), NOW)['state'], state)
+
+    def test_failed_is_red_only_while_the_error_code_is_set(self):
+        # Bambu keeps gcode_state=FAILED until the next print starts; dismissing
+        # the error on the printer clears print_error, and the rope must follow.
+        self.assertEqual(normalize(report('FAILED', has_error=True), NOW)['state'], 'error')
+        self.assertEqual(normalize(report('FAILED', has_error=False), NOW)['state'], 'idle')
 
     def test_absent_or_unrecognized_state_is_unknown_never_available(self):
         for raw in (None, '', 'WOBBLE', 42, {'a': 1}):

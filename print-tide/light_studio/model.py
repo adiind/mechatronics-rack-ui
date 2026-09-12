@@ -47,7 +47,10 @@ RAW_STATES = {
     'PAUSED': 'paused',
     'FINISH': 'finished',
     'FINISHED': 'finished',
-    'FAILED': 'error',
+    # FAILED lingers on the printer after a cancelled or failed print until the
+    # next job starts; once the operator dismisses the error (print_error -> 0)
+    # the bay must rest as idle, not stay red forever.
+    'FAILED': 'idle',
     'IDLE': 'idle',
     'READY': 'idle',
     'OFFLINE': 'offline',
