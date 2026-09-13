@@ -154,7 +154,7 @@ def _block(pix, start, count, colour):
 
 # ------------------------------------------------------------------- palettes
 
-DEEP = (0, 26, 80)         # unlit water (idle only; printing uses COL_REST)
+DEEP = (0, 26, 80)         # unlit water (idle swell)
 MID = (0, 80, 150)
 TEAL = (0, 150, 170)
 CREST = (110, 255, 255)
@@ -165,11 +165,12 @@ WATERLINE = (150, 255, 214)
 DROPLET = (120, 220, 255)
 SPLASH = (225, 255, 240)
 
-# The original NodeAnimator's printing palette, reproduced exactly. These are
-# the colours Adi's wall has always used for a running print: green water
-# rising through a red remainder, with a green drop falling into it.
+# The printing palette: green water rising through deep-blue unlit water, with
+# a green drop falling into it. The remainder used to be red (the original
+# NodeAnimator), which made a normal print look like an alarm from across the
+# room. Red now belongs to the error state alone (Adi, 2026-09-12).
 COL_PRINT = (0, 255, 60)     # printed portion / the water
-COL_REST = (255, 0, 0)       # the not-yet-printed remainder
+COL_REST = (0, 56, 200)      # the not-yet-printed remainder: deep blue, never red
 COL_DROP = (0, 255, 60)      # raindrop, same green as the water
 #: The original splashed the identical green onto the waterline, which is
 #: invisible against the water. Keep it green, but brighten it so the landing
@@ -177,7 +178,7 @@ COL_DROP = (0, 255, 60)      # raindrop, same green as the water
 COL_SPLASH = (150, 255, 170)
 AMBER = (255, 122, 8)
 AMBER_MARK = (255, 205, 120)
-ANGRY = (255, 38, 0)
+ANGRY = (255, 0, 0)          # error body: pure deep red, no orange
 ANGRY_MARK = (255, 235, 220)
 GREEN = (0, 198, 84)
 GREEN_BRIGHT = (170, 255, 200)
@@ -237,16 +238,17 @@ def _printing(n, T, percent, marks, still=False):
     """The original 'bucket filling with rain', reproduced.
 
     Behavioural reference is ``NodeAnimator`` in reference/server.py: the
-    printed portion is solid green, the remainder solid red, and while the print
-    runs a green drop falls from the top into the water with a brief splash.
-    0% is entirely red, 100% entirely green.
+    printed portion is solid green, the remainder solid deep blue, and while the
+    print runs a green drop falls from the top into the water with a brief
+    splash. 0% is entirely blue, 100% entirely green. Red is reserved for
+    errors so a healthy print can never be mistaken for one.
 
     Solid zones are also the cheapest thing this transport can carry -- the base
     is two ``range`` messages and a moving drop is two ``pixel`` messages, which
     is why the original never came close to its message budget.
 
     ``percent is None`` means the printer says RUNNING but has not told us how
-    far along it is. That must not be drawn as 0%, which would be a full red
+    far along it is. That must not be drawn as 0%, which would be a full blue
     bar, so it gets an explicit travelling green marker instead.
     """
     if percent is None:
@@ -284,14 +286,17 @@ def _paused(n, T):
 
 
 def _error(n, T):
-    """Orange-red breathing: deeper and slower than pause, never a strobe.
+    """Deep red breathing: deeper and slower than pause, never a strobe.
+
+    Pure red, no orange tint, so it cannot be confused with the amber pause or
+    with anything a healthy print shows (green fill, blue remainder).
 
     One uniform run plus two steady end marks. The earlier five 'hot ticks'
     split the body into five runs that all changed every tick, which needed
     ~31 messages/second and tore the rope into random-looking patches.
     """
     breath = 0.55 + 0.45 * (0.5 + 0.5 * math.sin(T * 1.6))
-    pix = [_scale(_mix(ANGRY, (255, 92, 12), 0.35 * breath), breath) for _ in range(n)]
+    pix = [_scale(ANGRY, breath) for _ in range(n)]
     _block(pix, 0, 3, ANGRY_MARK)
     _block(pix, n - 3, 3, ANGRY_MARK)
     return pix

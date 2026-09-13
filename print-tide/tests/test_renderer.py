@@ -125,7 +125,7 @@ class ProgressTests(unittest.TestCase):
             self.assertGreaterEqual(cycle, fall + SPLASH_SECONDS, travel)
             self.assertGreater(cycle, 0)
 
-    def test_a_droplet_falls_through_the_red_and_reaches_the_waterline(self):
+    def test_a_droplet_falls_through_the_blue_and_reaches_the_waterline(self):
         """The drop is green, lives only above the waterline, and lands."""
         settings = {'brightness': 100}
         for percent in (0, 3, 12, 25, 50, 90):
@@ -136,9 +136,9 @@ class ProgressTests(unittest.TestCase):
             for step in range(steps):
                 frame = render_rope('printing', percent, step * cycle / steps, 0,
                                     settings)
-                # A green pixel sitting inside the red remainder is the drop.
+                # A green-dominant pixel inside the blue remainder is the drop.
                 drops = [i for i in range(fill, STATUS_POSITIONS)
-                         if frame[i][1] > frame[i][0]]
+                         if frame[i][1] > frame[i][2]]
                 if drops:
                     seen.append(min(drops))
             if fill >= STATUS_POSITIONS - 3:
@@ -150,21 +150,42 @@ class ProgressTests(unittest.TestCase):
                                f'droplet never started high at {percent}%')
 
 
-class RedGreenTests(unittest.TestCase):
-    """The original NodeAnimator visual language for a running print."""
+class BlueGreenTests(unittest.TestCase):
+    """A running print: green water over a deep-blue remainder. Red is reserved
+    for the error state (Adi, 2026-09-12: a red default read as an alarm)."""
 
     def bar(self, percent, t=0.0, **settings):
         return render_rope('printing', percent, t, 0,
                            dict({'brightness': 100, 'reduced_motion': True},
                                 **settings))
 
-    def test_zero_percent_is_entirely_red(self):
+    def test_zero_percent_is_entirely_blue(self):
         frame = self.bar(0)
         self.assertEqual(len(set(tuple(p) for p in frame)), 1)
-        red = frame[0]
-        self.assertGreater(red[0], 0)
-        self.assertEqual(red[1], 0)
-        self.assertEqual(red[2], 0)
+        blue = frame[0]
+        self.assertEqual(blue[0], 0)
+        self.assertGreater(blue[2], blue[1])
+        self.assertGreater(blue[2], 100)
+
+    def test_a_printing_rope_never_shows_a_red_dominant_pixel(self):
+        """Red means error and nothing else on this wall."""
+        for percent in (None, 0, 5, 27, 50, 99, 100):
+            for t in (0.0, 0.7, 2.3, 5.5, 9.1):
+                for pixel in render_rope('printing', percent, t, 0,
+                                         {'brightness': 100}):
+                    self.assertFalse(pixel[0] > pixel[1] and pixel[0] > pixel[2],
+                                     (percent, t, pixel))
+
+    def test_error_body_is_pure_deep_red(self):
+        """No orange tint: green and blue stay at zero across the breath."""
+        for t in (0.0, 0.5, 1.0, 1.9, 3.3):
+            frame = render_rope('error', 40, t, 0, {'brightness': 100})
+            body = frame[3:-3]
+            self.assertTrue(body)
+            for pixel in body:
+                self.assertGreater(pixel[0], 100, (t, pixel))
+                self.assertEqual(pixel[1], 0, (t, pixel))
+                self.assertEqual(pixel[2], 0, (t, pixel))
 
     def test_one_hundred_percent_is_entirely_green(self):
         frame = self.bar(100)
@@ -173,14 +194,15 @@ class RedGreenTests(unittest.TestCase):
         self.assertEqual(green[0], 0)
         self.assertGreater(green[1], 0)
 
-    def test_the_bar_is_green_below_the_waterline_and_red_above(self):
+    def test_the_bar_is_green_below_the_waterline_and_blue_above(self):
         for percent in (10, 25, 50, 75, 90):
             frame = self.bar(percent)
             fill = round(percent / 100 * STATUS_POSITIONS)
             for i in range(fill):
-                self.assertGreater(frame[i][1], frame[i][0], (percent, i))
+                self.assertGreater(frame[i][1], frame[i][2], (percent, i))
             for i in range(fill, STATUS_POSITIONS):
-                self.assertGreater(frame[i][0], frame[i][1], (percent, i))
+                self.assertGreater(frame[i][2], frame[i][1], (percent, i))
+                self.assertEqual(frame[i][0], 0, (percent, i))
 
     def test_each_zone_is_a_single_solid_colour(self):
         frame = self.bar(50)

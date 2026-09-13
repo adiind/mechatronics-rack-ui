@@ -16,9 +16,9 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const STATE_TEXT = {
   idle:      ['Available',   'Free and ready. Resting cyan.'],
   preparing: ['Preparing',   'The printer reported PREPARE. Cyan sweep.'],
-  printing:  ['Printing',    'The waterline is progress; drops fall into it.'],
+  printing:  ['Printing',    'Green water rises through deep blue; drops fall into it.'],
   paused:    ['Paused',      'Amber breathing with a steady marker. Needs a look.'],
-  error:     ['Error',       'Orange-red breathing. The printer reported a print error.'],
+  error:     ['Error',       'Deep red breathing. The printer reported a print error.'],
   finished:  ['Collect',     'A smooth rainbow on completion, then resting cyan until marked collected.'],
   offline:   ['Offline',     'No fresh telemetry. Dim purple heartbeat, no percentage.'],
   unknown:   ['Unknown',     'Connected, but the reported state is not one we recognise.'],

@@ -140,7 +140,7 @@ first paint, apart from the ordinary 12-second resync.
 | Preparing | cyan sweep rising up the rope | `PREPARE` only — never inferred from temperature |
 | Printing | teal→green filled region, dark blue remainder, bright waterline, falling droplets and splashes, across the 90-position region | `RUNNING` |
 | Paused | amber breathing with three steady amber blocks | `PAUSE` |
-| Error | stronger orange-red breathing with five hot ticks | `print_error` set, or `FAILED` |
+| Error | deep red breathing, pure red with no orange | `print_error` set, or `FAILED` |
 | Collect | 12 s smooth rainbow wash (one hue per tick, two full turns) cross-fading into the same resting cyan | observed completion (rainbow), or retained `FINISH` (cyan only) |
 | Offline | dim slate/purple double-thump heartbeat | link down, no timestamp, stale >120 s, or a future timestamp |
 | Unknown | dim grey dashes | connected, but the reported state is not one we recognise |
