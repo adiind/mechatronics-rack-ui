@@ -165,27 +165,34 @@ WATERLINE = (150, 255, 214)
 DROPLET = (120, 220, 255)
 SPLASH = (225, 255, 240)
 
-# The printing palette: green water rising through deep-blue unlit water, with
-# a green drop falling into it. The remainder used to be red (the original
+# The printing palette: orange fill rising through deep-blue unlit water, with
+# an orange drop falling into it. The remainder used to be red (the original
 # NodeAnimator), which made a normal print look like an alarm from across the
-# room. Red now belongs to the error state alone (Adi, 2026-09-12).
-COL_PRINT = (0, 255, 60)     # printed portion / the water
+# room; red now belongs to the error state alone (Adi, 2026-09-12). The fill
+# was green until 2026-09-13, when Adi found green-on-blue too similar from
+# across the room and asked for "orangish" progress.
+COL_PRINT = (255, 110, 0)    # printed portion / the water: orange
 COL_REST = (0, 56, 200)      # the not-yet-printed remainder: deep blue, never red
-COL_DROP = (0, 255, 60)      # raindrop, same green as the water
-#: The original splashed the identical green onto the waterline, which is
-#: invisible against the water. Keep it green, but brighten it so the landing
-#: actually reads as a splash.
-COL_SPLASH = (150, 255, 170)
-AMBER = (255, 122, 8)
-AMBER_MARK = (255, 205, 120)
+COL_DROP = (255, 110, 0)     # raindrop, same orange as the water
+#: The splash is a paler orange so the landing reads against the fill.
+COL_SPLASH = (255, 210, 130)
+#: Paused breathes yellow, not amber: amber sat right next to the orange fill.
+AMBER = (255, 210, 0)
+AMBER_MARK = (255, 240, 170)
 ANGRY = (255, 0, 0)          # error body: pure deep red, no orange
 ANGRY_MARK = (255, 235, 220)
+#: Ready to collect: a finished print rests in steady green until someone opens
+#: the door or marks it collected. Green is free for this now that progress is
+#: orange, and it is the one colour that says "done, come get it".
 GREEN = (0, 198, 84)
 GREEN_BRIGHT = (170, 255, 200)
+#: Stopped early: a cancelled or failed print whose error has been dismissed
+#: but whose bed has not been cleared. Magenta is used nowhere else.
+MAGENTA = (255, 0, 120)
 SLATE = (120, 100, 215)
 GREY = (150, 150, 160)
-#: The resting look: nothing to say, so plain cyan. Used for 'idle' and for
-#: 'finished' once the rainbow is over. Static, so it costs nothing to hold.
+#: The resting look: nothing to say, so plain cyan. Used for 'idle' only; a
+#: finished bay rests in GREEN until collected. Static, so it costs nothing.
 CYAN = (0, 220, 240)
 
 
@@ -238,9 +245,9 @@ def _printing(n, T, percent, marks, still=False):
     """The original 'bucket filling with rain', reproduced.
 
     Behavioural reference is ``NodeAnimator`` in reference/server.py: the
-    printed portion is solid green, the remainder solid deep blue, and while the
-    print runs a green drop falls from the top into the water with a brief
-    splash. 0% is entirely blue, 100% entirely green. Red is reserved for
+    printed portion is solid orange, the remainder solid deep blue, and while
+    the print runs an orange drop falls from the top into the water with a brief
+    splash. 0% is entirely blue, 100% entirely orange. Red is reserved for
     errors so a healthy print can never be mistaken for one.
 
     Solid zones are also the cheapest thing this transport can carry -- the base
@@ -249,7 +256,7 @@ def _printing(n, T, percent, marks, still=False):
 
     ``percent is None`` means the printer says RUNNING but has not told us how
     far along it is. That must not be drawn as 0%, which would be a full blue
-    bar, so it gets an explicit travelling green marker instead.
+    bar, so it gets an explicit travelling orange marker instead.
     """
     if percent is None:
         pix = [_scale(COL_PRINT, 0.28) for _ in range(n)]
@@ -262,7 +269,7 @@ def _printing(n, T, percent, marks, still=False):
     pix = [COL_PRINT if i < fill else COL_REST for i in range(n)]
 
     # One drop per cycle, falling from the top down into the water. It is only
-    # drawn above the waterline, so it never eats into the green fill.
+    # drawn above the waterline, so it never eats into the orange fill.
     travel = (n - 1) - fill
     if travel > 2 and not still:
         fall, cycle = droplet_timing(travel)
@@ -277,7 +284,7 @@ def _printing(n, T, percent, marks, still=False):
 
 
 def _paused(n, T):
-    """Amber breathing plus a stable marker that does not breathe."""
+    """Yellow breathing plus a stable marker that does not breathe."""
     breath = 0.45 + 0.35 * (0.5 + 0.5 * math.sin(T * 1.2))
     pix = [_scale(AMBER, breath) for _ in range(n)]
     _block(pix, 0, 4, AMBER_MARK)               # steady amber marks at both ends;
@@ -288,8 +295,8 @@ def _paused(n, T):
 def _error(n, T):
     """Deep red breathing: deeper and slower than pause, never a strobe.
 
-    Pure red, no orange tint, so it cannot be confused with the amber pause or
-    with anything a healthy print shows (green fill, blue remainder).
+    Pure red, no orange tint, so it cannot be confused with the yellow pause or
+    with anything a healthy print shows (orange fill, blue remainder).
 
     One uniform run plus two steady end marks. The earlier five 'hot ticks'
     split the body into five runs that all changed every tick, which needed
@@ -303,12 +310,14 @@ def _error(n, T):
 
 
 def _finished(n, T, since_complete):
-    """Smooth rainbow wash on a genuine completion, then the resting cyan.
+    """Smooth rainbow wash on a genuine completion, then steady collect-green.
 
     The whole rope carries one hue that turns through the spectrum: one run per
     tick, so it stays smooth under the message budget where a spatial rainbow
-    would tear. Over the last RAINBOW_FADE seconds it cross-fades into CYAN so
-    the hand-off to the resting state has no visible step.
+    would tear. Over the last RAINBOW_FADE seconds it cross-fades into GREEN so
+    the hand-off to "ready to collect" has no visible step. The green holds
+    until the door is opened or the bay is marked collected, at which point the
+    studio reports the bay as idle (cyan).
     """
     if since_complete is not None and 0 <= since_complete < CELEBRATE_SECONDS:
         hue = (since_complete / CELEBRATE_SECONDS) * RAINBOW_CYCLES
@@ -316,9 +325,23 @@ def _finished(n, T, since_complete):
         colour = _hue_rgb(hue)
         remaining = CELEBRATE_SECONDS - since_complete
         if remaining < RAINBOW_FADE:
-            colour = _mix(colour, CYAN, 1.0 - remaining / RAINBOW_FADE)
+            colour = _mix(colour, GREEN, 1.0 - remaining / RAINBOW_FADE)
         return [colour for _ in range(n)]
-    return [CYAN for _ in range(n)]
+    return [GREEN for _ in range(n)]
+
+
+def _stopped(n, T):
+    """Steady magenta: the print stopped early and the bed still needs clearing.
+
+    Bambu keeps ``gcode_state=FAILED`` after a cancel or a dismissed failure
+    until the next job starts. This is that window. One static run, so it costs
+    nothing to hold, and a colour no other state uses so it cannot be read as
+    an error (red), a pause (yellow) or a completion (green).
+    """
+    pix = [MAGENTA for _ in range(n)]
+    _block(pix, 0, 3, _scale(MAGENTA, 0.45))
+    _block(pix, n - 3, 3, _scale(MAGENTA, 0.45))
+    return pix
 
 
 def _offline(n, T):
@@ -363,6 +386,7 @@ SCENES = {
     'paused': lambda n, T, wall, ctx: _paused(n, T),
     'error': lambda n, T, wall, ctx: _error(n, T),
     'finished': lambda n, T, wall, ctx: _finished(n, T, ctx['since_complete']),
+    'stopped': lambda n, T, wall, ctx: _stopped(n, T),
     'offline': lambda n, T, wall, ctx: _offline(n, T),
     'unknown': lambda n, T, wall, ctx: _unknown(n, T),
 }

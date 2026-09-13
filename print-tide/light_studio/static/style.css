@@ -217,6 +217,7 @@ h2 span { color: var(--aqua); padding-left: 12px; }
 .state.error, .state.paused { color: var(--coral); }
 .state.offline, .state.unknown { color: var(--dim); }
 .state.finished { color: #8fe6a3; }
+.state.stopped { color: #ff5fb0; }
 
 .status-meta { font: 9px/1.7 var(--mono); color: var(--muted); min-height: 62px; text-align: center; margin: 6px 0 12px; overflow: hidden; }
 .status-meta .job { white-space: nowrap; text-overflow: ellipsis; overflow: hidden; color: var(--ink); }
@@ -332,10 +333,11 @@ h2 span { color: var(--aqua); padding-left: 12px; }
 .legend span { display: flex; align-items: center; gap: 7px; }
 .legend i { width: 7px; height: 7px; border-radius: 50%; background: #3f7fb5; }
 .legend i.preparing { background: #37d6f2; }
-.legend i.printing { background: #69d9b2; }
+.legend i.printing { background: #ff7a1a; }
 .legend i.paused { background: var(--amber); }
 .legend i.error { background: #ed7559; }
 .legend i.finished { background: #89e093; }
+.legend i.stopped { background: #ff5fb0; }
 .legend i.offline { background: #797792; }
 .legend i.unknown { background: #626870; }
 .legend i.cap { background: #ffffff; }

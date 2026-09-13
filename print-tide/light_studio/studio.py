@@ -26,6 +26,9 @@ from . import transport as tp
 from .layout import (Conflict, DEFAULTS, LayoutStore, atomic_write, merge_settings,
                      read_json, validate_accent, validate_settings)
 from .model import STALE_AFTER, STATES, normalize, number
+
+#: States whose bed still holds a part: collection (button or door) applies.
+COLLECTABLE = ('finished', 'stopped')
 from .renderer import (ACCENT_POSITIONS, CELEBRATE_SECONDS, IDENTIFY_SECONDS,
                        PIXELS, STATUS_POSITIONS, compose_rope, render_accent,
                        render_rope)
@@ -114,6 +117,7 @@ class Studio:
         # Persistence first: a corrupt layout must fail before any writer runs.
         self.store = LayoutStore(self.root, self.initial)
         self.ack_path = self.root / 'collected.json'
+        self.doors = {}                  # last door_open per printer (None = unknown)
         self.lifecycle_path = self.root / 'lifecycle.json'
         self.acks = self._load_acks()
         self.prior = self._load_lifecycle()
@@ -363,8 +367,8 @@ class Studio:
         """Local display bookkeeping only. Never sends anything to a printer."""
         with self.lock:
             state = self.status.get(printer)
-            if not state or not state['fresh'] or state['state'] != 'finished':
-                raise ValueError('Only a live, finished printer can be marked collected')
+            if not state or not state['fresh'] or state['state'] not in COLLECTABLE:
+                raise ValueError('Only a live, finished or stopped printer can be marked collected')
             self.acks[printer] = state['job']
             atomic_write(self.ack_path, self.acks)
             return {'ok': True, 'printer': printer}
@@ -419,7 +423,7 @@ class Studio:
                     # Bind the claim to the job name we saw finish. Names are not
                     # unique IDs, so this only ever narrows the claim.
                     self.observed_complete[name] = {'at': now, 'job': state['job']}
-                elif observed in ('printing', 'preparing') and previous['state'] in ('idle', 'finished', 'unknown'):
+                elif observed in ('printing', 'preparing') and previous['state'] in ('idle', 'finished', 'stopped', 'unknown'):
                     self._add_event(now, position, 'start', name)
             else:
                 # We did not watch this interval. Anything could have started and
@@ -441,7 +445,19 @@ class Studio:
                 self.celebrations.pop(name, None)
                 self.observed_complete.pop(name, None)
 
-            if observed == 'finished' and name in self.acks and self.acks[name] == state['job']:
+            # The door is the verification layer: opening (or closing) it on a
+            # finished or stopped bay means someone was there and the bed is
+            # being cleared, so it counts as collection without a button press.
+            door = state['door_open'] if state['fresh'] else None
+            door_before = self.doors.get(name)
+            if door is not None and door_before is not None and door != door_before \
+                    and observed in COLLECTABLE and state['fresh'] \
+                    and self.acks.get(name) != state['job']:
+                self.acks[name] = state['job']
+                acks_changed = True
+            self.doors[name] = door
+
+            if observed in COLLECTABLE and name in self.acks and self.acks[name] == state['job']:
                 state['state'] = 'idle'
                 state['collected'] = True
 

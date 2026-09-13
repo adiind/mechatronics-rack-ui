@@ -16,10 +16,11 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const STATE_TEXT = {
   idle:      ['Available',   'Free and ready. Resting cyan.'],
   preparing: ['Preparing',   'The printer reported PREPARE. Cyan sweep.'],
-  printing:  ['Printing',    'Green water rises through deep blue; drops fall into it.'],
-  paused:    ['Paused',      'Amber breathing with a steady marker. Needs a look.'],
+  printing:  ['Printing',    'Orange fill rises through deep blue; drops fall into it.'],
+  paused:    ['Paused',      'Yellow breathing with a steady marker. Needs a look.'],
   error:     ['Error',       'Deep red breathing. The printer reported a print error.'],
-  finished:  ['Collect',     'A smooth rainbow on completion, then resting cyan until marked collected.'],
+  finished:  ['Collect',     'A smooth rainbow on completion, then steady green until the door opens or it is marked collected.'],
+  stopped:   ['Stopped',     'Cancelled or failed and dismissed. Steady magenta until the door opens or it is marked collected.'],
   offline:   ['Offline',     'No fresh telemetry. Dim purple heartbeat, no percentage.'],
   unknown:   ['Unknown',     'Connected, but the reported state is not one we recognise.'],
 };
@@ -608,6 +609,8 @@ function updateCards() {
       reading.textContent = Math.round(status.percent) + '%';
     } else if (status.state === 'finished') {
       reading.textContent = 'Ready';
+    } else if (status.state === 'stopped') {
+      reading.textContent = 'Clear bed';
     } else if (status.state === 'idle') {
       reading.textContent = '≈';
     } else {
@@ -644,7 +647,7 @@ function updateCards() {
       : (status.reason_text || 'no fresh data');
 
     const collect = card.querySelector('.collected');
-    collect.hidden = status.state !== 'finished';
+    collect.hidden = status.state !== 'finished' && status.state !== 'stopped';
 
     const find = card.querySelector('.identify');
     find.disabled = !live.cast_enabled || busy;

@@ -138,10 +138,11 @@ first paint, apart from the ordinary 12-second resync.
 | --- | --- | --- |
 | Available | solid resting cyan, no motion (2026-09-06) | `IDLE`/`READY`, fresh |
 | Preparing | cyan sweep rising up the rope | `PREPARE` only — never inferred from temperature |
-| Printing | teal→green filled region, dark blue remainder, bright waterline, falling droplets and splashes, across the 90-position region | `RUNNING` |
-| Paused | amber breathing with three steady amber blocks | `PAUSE` |
-| Error | deep red breathing, pure red with no orange | `print_error` set, or `FAILED` |
-| Collect | 12 s smooth rainbow wash (one hue per tick, two full turns) cross-fading into the same resting cyan | observed completion (rainbow), or retained `FINISH` (cyan only) |
+| Printing | orange filled region, deep blue remainder, falling orange droplets and splashes, across the 90-position region | `RUNNING` |
+| Paused | yellow breathing with steady pale marks at both ends | `PAUSE` |
+| Error | deep red breathing, pure red with no orange | `print_error` set (any gcode state) |
+| Stopped early | steady magenta until the door opens or **Mark collected** | `FAILED` with `print_error` cleared (cancel, or a dismissed failure) |
+| Collect | 12 s smooth rainbow wash (one hue per tick, two full turns) cross-fading into steady green, held until the door opens or **Mark collected** | observed completion (rainbow), or retained `FINISH` (green only) |
 | Offline | dim slate/purple double-thump heartbeat | link down, no timestamp, stale >120 s, or a future timestamp |
 | Unknown | dim grey dashes | connected, but the reported state is not one we recognise |
 

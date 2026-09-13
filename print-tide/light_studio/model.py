@@ -21,7 +21,8 @@ import datetime as dt
 import math
 import re
 
-STATES = ('idle', 'preparing', 'printing', 'paused', 'error', 'finished', 'offline', 'unknown')
+STATES = ('idle', 'preparing', 'printing', 'paused', 'error', 'finished', 'stopped',
+          'offline', 'unknown')
 
 #: A snapshot older than this many seconds is stale even if the link is up.
 STALE_AFTER = 120.0
@@ -48,9 +49,10 @@ RAW_STATES = {
     'FINISH': 'finished',
     'FINISHED': 'finished',
     # FAILED lingers on the printer after a cancelled or failed print until the
-    # next job starts; once the operator dismisses the error (print_error -> 0)
-    # the bay must rest as idle, not stay red forever.
-    'FAILED': 'idle',
+    # next job starts. While print_error is set it is an error (red); once the
+    # operator dismisses it the bay is 'stopped' (magenta) until the bed is
+    # cleared, i.e. the door opens or someone marks it collected.
+    'FAILED': 'stopped',
     'IDLE': 'idle',
     'READY': 'idle',
     'OFFLINE': 'offline',
@@ -169,5 +171,7 @@ def normalize(row, now):
         # Negative ages (source slightly ahead) are reported as 0s, not as a
         # negative "message from the future".
         'age': round(max(0.0, age), 1) if age is not None else None,
+        # Door sensor (X1/H2D report it in home_flag); None when unknown.
+        'door_open': row.get('door_open') if type(row.get('door_open')) is bool else None,
         'collected': False,
     }

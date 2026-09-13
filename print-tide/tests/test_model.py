@@ -65,15 +65,23 @@ class StateTests(unittest.TestCase):
 
     def test_raw_states_map_without_inventing_stages(self):
         expected = {'RUNNING': 'printing', 'PREPARE': 'preparing', 'PAUSE': 'paused',
-                    'FINISH': 'finished', 'IDLE': 'idle', 'FAILED': 'idle'}
+                    'FINISH': 'finished', 'IDLE': 'idle', 'FAILED': 'stopped'}
         for raw, state in expected.items():
             self.assertEqual(normalize(report(raw), NOW)['state'], state)
 
     def test_failed_is_red_only_while_the_error_code_is_set(self):
         # Bambu keeps gcode_state=FAILED until the next print starts; dismissing
-        # the error on the printer clears print_error, and the rope must follow.
+        # the error on the printer clears print_error, and the rope must follow:
+        # 'stopped' (magenta) until the bed is cleared, never red forever.
         self.assertEqual(normalize(report('FAILED', has_error=True), NOW)['state'], 'error')
-        self.assertEqual(normalize(report('FAILED', has_error=False), NOW)['state'], 'idle')
+        self.assertEqual(normalize(report('FAILED', has_error=False), NOW)['state'], 'stopped')
+
+    def test_door_state_passes_through_only_as_a_boolean(self):
+        row = report('FINISH'); row['door_open'] = True
+        self.assertIs(normalize(row, NOW)['door_open'], True)
+        row['door_open'] = 'yes'
+        self.assertIsNone(normalize(row, NOW)['door_open'])
+        self.assertIsNone(normalize(report('FINISH'), NOW)['door_open'])
 
     def test_absent_or_unrecognized_state_is_unknown_never_available(self):
         for raw in (None, '', 'WOBBLE', 42, {'a': 1}):

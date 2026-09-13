@@ -288,6 +288,44 @@ class CollectionTests(Harness):
         self.tick(count=2)
         self.assertEqual(self.studio.status['printer1']['state'], 'finished')
 
+    def test_a_stopped_print_can_be_marked_collected_and_then_rests_idle(self):
+        self.set('printer1', state='FAILED', has_error=False, job='tray')
+        self.tick()
+        self.assertEqual(self.studio.status['printer1']['state'], 'stopped')
+        self.studio.collected('printer1')
+        self.tick()
+        self.assertEqual(self.studio.status['printer1']['state'], 'idle')
+        self.assertTrue(self.studio.status['printer1']['collected'])
+
+    def test_opening_the_door_on_a_finished_bay_counts_as_collection(self):
+        self.set('printer1', state='FINISH', percent=100, job='tray', door_open=False)
+        self.tick(count=2)
+        self.assertEqual(self.studio.status['printer1']['state'], 'finished')
+        self.set('printer1', door_open=True)
+        self.tick()
+        state = self.studio.status['printer1']
+        self.assertEqual(state['state'], 'idle')
+        self.assertTrue(state['collected'])
+        # Nothing was sent to the printer; the studio only paints ropes.
+        for node, payload in self.sent:
+            self.assertIn(node, NODES)
+
+    def test_the_door_moving_while_printing_or_idle_changes_nothing(self):
+        self.set('printer1', state='RUNNING', percent=40, job='tray', door_open=False)
+        self.tick()
+        self.set('printer1', door_open=True)
+        self.tick()
+        self.assertEqual(self.studio.status['printer1']['state'], 'printing')
+        self.assertNotIn('printer1', self.studio.acks)
+        self.set('printer1', state='FINISH', percent=100)
+        self.tick()
+        # The door was already open when it finished: it must stay 'finished'
+        # until the door moves again (or the button is pressed).
+        self.assertEqual(self.studio.status['printer1']['state'], 'finished')
+        self.set('printer1', door_open=False)
+        self.tick()
+        self.assertEqual(self.studio.status['printer1']['state'], 'idle')
+
     def test_a_different_job_name_is_not_covered_by_an_old_acknowledgement(self):
         self.set('printer1', state='FINISH', percent=100, job='tray')
         self.tick()
@@ -627,7 +665,7 @@ class FilmTests(Harness):
 
     def test_the_lab_can_simulate_a_different_state_per_bay(self):
         bays = [{'state': s, 'percent': 50} for s in
-                ('idle', 'printing', 'paused', 'error', 'finished', 'offline', 'unknown')]
+                ('idle', 'printing', 'paused', 'error', 'finished', 'stopped', 'offline')]
         film = self.studio.sim_film(bays, frames=2, fps=4, start=1.0)
         self.assertTrue(film['simulated'])
         self.assertEqual(len(film['ropes']), 7)

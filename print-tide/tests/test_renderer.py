@@ -151,8 +151,9 @@ class ProgressTests(unittest.TestCase):
 
 
 class BlueGreenTests(unittest.TestCase):
-    """A running print: green water over a deep-blue remainder. Red is reserved
-    for the error state (Adi, 2026-09-12: a red default read as an alarm)."""
+    """A running print: orange fill over a deep-blue remainder. Pure red is
+    reserved for the error state (Adi, 2026-09-12: a red default read as an
+    alarm; 2026-09-13: green-on-blue was too similar, so the fill is orange)."""
 
     def bar(self, percent, t=0.0, **settings):
         return render_rope('printing', percent, t, 0,
@@ -167,14 +168,16 @@ class BlueGreenTests(unittest.TestCase):
         self.assertGreater(blue[2], blue[1])
         self.assertGreater(blue[2], 100)
 
-    def test_a_printing_rope_never_shows_a_red_dominant_pixel(self):
-        """Red means error and nothing else on this wall."""
+    def test_a_printing_rope_never_shows_a_pure_red_pixel(self):
+        """Red means error and nothing else on this wall. The orange fill is
+        red-led, so every red-led pixel must carry a clear green component."""
         for percent in (None, 0, 5, 27, 50, 99, 100):
             for t in (0.0, 0.7, 2.3, 5.5, 9.1):
                 for pixel in render_rope('printing', percent, t, 0,
                                          {'brightness': 100}):
-                    self.assertFalse(pixel[0] > pixel[1] and pixel[0] > pixel[2],
-                                     (percent, t, pixel))
+                    if pixel[0] > pixel[1] and pixel[0] > pixel[2]:
+                        self.assertGreaterEqual(pixel[1], pixel[0] * 0.35,
+                                                (percent, t, pixel))
 
     def test_error_body_is_pure_deep_red(self):
         """No orange tint: green and blue stay at zero across the breath."""
@@ -187,14 +190,15 @@ class BlueGreenTests(unittest.TestCase):
                 self.assertEqual(pixel[1], 0, (t, pixel))
                 self.assertEqual(pixel[2], 0, (t, pixel))
 
-    def test_one_hundred_percent_is_entirely_green(self):
+    def test_one_hundred_percent_is_entirely_orange(self):
         frame = self.bar(100)
         self.assertEqual(len(set(tuple(p) for p in frame)), 1)
-        green = frame[0]
-        self.assertEqual(green[0], 0)
-        self.assertGreater(green[1], 0)
+        orange = frame[0]
+        self.assertGreater(orange[0], orange[1])
+        self.assertGreater(orange[1], 0)
+        self.assertEqual(orange[2], 0)
 
-    def test_the_bar_is_green_below_the_waterline_and_blue_above(self):
+    def test_the_bar_is_orange_below_the_waterline_and_blue_above(self):
         for percent in (10, 25, 50, 75, 90):
             frame = self.bar(percent)
             fill = round(percent / 100 * STATUS_POSITIONS)
@@ -300,7 +304,7 @@ class CelebrationTests(unittest.TestCase):
         steady = render_rope('finished', 100, 1.0, 0, {}, since_complete=None)
         self.assertNotEqual(fresh, steady)
 
-    def test_celebration_is_a_uniform_rainbow_that_turns_and_ends_in_cyan(self):
+    def test_celebration_is_a_uniform_rainbow_that_turns_and_ends_in_collect_green(self):
         seen = set()
         one_cycle = CELEBRATE_SECONDS / 2          # RAINBOW_CYCLES turns in total
         for k in range(6):
@@ -313,9 +317,22 @@ class CelebrationTests(unittest.TestCase):
         rest = render_rope('finished', 100, 1.0, 0, {}, since_complete=None)
         for a, b in zip(nearly, rest):
             for x, y in zip(a, b):
-                self.assertLessEqual(abs(x - y), QUANT, 'cross-fade hands off to cyan with no visible step')
-        self.assertEqual(rest, render_rope('idle', None, 1.0, 0, {}),
-                         'finished rests in the same cyan as idle')
+                self.assertLessEqual(abs(x - y), QUANT, 'cross-fade hands off to green with no visible step')
+        self.assertNotEqual(rest, render_rope('idle', None, 1.0, 0, {}),
+                            'ready-to-collect must be distinguishable from idle')
+        self.assertEqual(len({tuple(p) for p in rest}), 1)
+        self.assertGreater(rest[0][1], rest[0][0])
+        self.assertGreater(rest[0][1], rest[0][2])
+
+    def test_stopped_is_a_steady_magenta_unlike_error_pause_or_collect(self):
+        frame = render_rope('stopped', None, 3.0, 0, {'brightness': 100})
+        self.assertEqual(frame, render_rope('stopped', None, 7.5, 0, {'brightness': 100}),
+                         'stopped is static: it must cost nothing to hold')
+        body = frame[3:-3]
+        for pixel in body:
+            self.assertGreater(pixel[0], 150)
+            self.assertEqual(pixel[1], 0)
+            self.assertGreater(pixel[2], 60, 'not pure red: red is the error colour')
 
     def test_the_celebration_is_bounded_and_settles_back_to_steady_green(self):
         steady = render_rope('finished', 100, 5.0, 0, {}, since_complete=None)

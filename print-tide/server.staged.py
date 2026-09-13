@@ -158,6 +158,9 @@ class Printer:
             # HMS entries are often mere warnings (AMS, filament) -- only a real
             # print_error should turn the bar red.
             if p.get("print_error") is not None:        st["has_error"] = p["print_error"] != 0
+            # home_flag bit 23 is the enclosure door on X1/H2D-class machines
+            # (printers without a door sensor simply never set it).
+            if isinstance(p.get("home_flag"), int):     st["door_open"] = bool(p["home_flag"] & (1 << 23))
             st["updated"] = time.strftime("%Y-%m-%d %H:%M:%S")
 
     def mqtt_thread(self):
