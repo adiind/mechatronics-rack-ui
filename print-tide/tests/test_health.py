@@ -4,7 +4,7 @@ import unittest
 
 from test_core import MAP, NOW, report, studio
 
-from light_studio.studio import ACK_FRESH_SECONDS, SILENT_SECONDS
+from light_studio.studio import ACK_FRESH_SECONDS, SILENT_SECONDS, TICK_HZ
 
 
 class Clock:
@@ -64,6 +64,10 @@ class HealthTests(unittest.TestCase):
         self.assertEqual(self.studio.view()['ropes']['node02']['receipt'], 'silent')
 
     def test_offline_status_wins_and_online_return_forces_repaint(self):
+        # A first paint of water + ink bands + droplet can spill into a second
+        # tick under the per-tick message cap; two ticks always complete it.
+        self.studio.tick()
+        self.clock.t += 1 / TICK_HZ
         self.studio.tick()
         self.studio.observe_node('node02', 'ack', {'ok': True})
         self.studio.observe_node('node02', 'status', 'offline')

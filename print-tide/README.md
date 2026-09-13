@@ -138,7 +138,7 @@ first paint, apart from the ordinary 12-second resync.
 | --- | --- | --- |
 | Available | solid resting cyan, no motion (2026-09-06) | `IDLE`/`READY`, fresh |
 | Preparing | cyan sweep rising up the rope | `PREPARE` only — never inferred from temperature |
-| Printing | orange filled region, deep blue remainder, falling orange droplets and splashes, across the 90-position region | `RUNNING` |
+| Printing | orange filled region, remainder in six bands of ink darkening from deep blue at the waterline towards the top, falling orange droplets and splashes, across the 90-position region | `RUNNING` |
 | Paused | yellow breathing with steady pale marks at both ends | `PAUSE` |
 | Error | deep red breathing, pure red with no orange | `print_error` set (any gcode state) |
 | Stopped early | steady magenta until the door opens or **Mark collected** | `FAILED` with `print_error` cleared (cancel, or a dismissed failure) |

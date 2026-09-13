@@ -172,7 +172,14 @@ SPLASH = (225, 255, 240)
 # was green until 2026-09-13, when Adi found green-on-blue too similar from
 # across the room and asked for "orangish" progress.
 COL_PRINT = (255, 110, 0)    # printed portion / the water: orange
-COL_REST = (0, 56, 200)      # the not-yet-printed remainder: deep blue, never red
+COL_REST = (0, 56, 200)      # the not-yet-printed remainder at the waterline: deep blue
+#: The remainder is drawn as INK_BANDS shades of ink, deep blue at the
+#: waterline darkening step by step to COL_INK towards the top of the rope
+#: (Adi, 2026-09-13: "different shades of ink ... progressively darker"). Banded
+#: rather than a smooth gradient so the base stays a handful of runs; the
+#: darkest shade is kept well clear of the "reads as off" floor.
+COL_INK = (0, 20, 96)
+INK_BANDS = 6
 COL_DROP = (255, 110, 0)     # raindrop, same orange as the water
 #: The splash is a paler orange so the landing reads against the fill.
 COL_SPLASH = (255, 210, 130)
@@ -241,18 +248,42 @@ def droplet_timing(travel, speed=DROP_SPEED):
     return fall, max(MIN_DROP_CYCLE, fall + SPLASH_SECONDS + DROP_GAP)
 
 
+def ink_shade(band):
+    """Colour of ink band ``band`` (0 = at the waterline, INK_BANDS-1 = top)."""
+    band = max(0, min(INK_BANDS - 1, band))
+    return _mix(COL_REST, COL_INK, band / (INK_BANDS - 1))
+
+
+def _ink(pix, fill):
+    """Paint the remainder above ``fill`` as INK_BANDS equal bands of ink.
+
+    Band boundaries are relative to the waterline so the shade nearest the water
+    is always the deep blue and the far end is always the darkest ink, whatever
+    the percentage. They only move when the percent does, so between updates the
+    whole base is free on the wire.
+    """
+    n = len(pix)
+    rest = n - fill
+    if rest <= 0:
+        return
+    for i in range(fill, n):
+        band = min(INK_BANDS - 1, (i - fill) * INK_BANDS // rest)
+        pix[i] = ink_shade(band)
+
+
 def _printing(n, T, percent, marks, still=False):
     """The original 'bucket filling with rain', reproduced.
 
     Behavioural reference is ``NodeAnimator`` in reference/server.py: the
-    printed portion is solid orange, the remainder solid deep blue, and while
-    the print runs an orange drop falls from the top into the water with a brief
-    splash. 0% is entirely blue, 100% entirely orange. Red is reserved for
-    errors so a healthy print can never be mistaken for one.
+    printed portion is solid orange, the remainder ink -- deep blue at the
+    waterline stepping through INK_BANDS progressively darker shades towards the
+    top -- and while the print runs an orange drop falls from the top into the
+    water with a brief splash. 0% is entirely ink, 100% entirely orange. Red is
+    reserved for errors so a healthy print can never be mistaken for one.
 
-    Solid zones are also the cheapest thing this transport can carry -- the base
-    is two ``range`` messages and a moving drop is two ``pixel`` messages, which
-    is why the original never came close to its message budget.
+    Solid zones are the cheapest thing this transport can carry -- the base is
+    one ``range`` for the water plus one per ink band, all of which hold still
+    between percent changes, and a moving drop is two ``pixel`` messages.
 
     ``percent is None`` means the printer says RUNNING but has not told us how
     far along it is. That must not be drawn as 0%, which would be a full blue
@@ -266,7 +297,8 @@ def _printing(n, T, percent, marks, still=False):
         return pix
 
     fill = max(0, min(n, int(round(percent / 100.0 * n))))
-    pix = [COL_PRINT if i < fill else COL_REST for i in range(n)]
+    pix = [COL_PRINT for _ in range(n)]
+    _ink(pix, fill)
 
     # One drop per cycle, falling from the top down into the water. It is only
     # drawn above the waterline, so it never eats into the orange fill.
@@ -394,6 +426,16 @@ SCENES = {
 
 # ---------------------------------------------------------------- composition
 
+def _water_span(pix):
+    """Length of the leading orange-led run (the printed water) of a frame."""
+    span = 0
+    for r, g, b in pix:
+        if not (r > g and r > b):
+            break
+        span += 1
+    return span
+
+
 def _apply_ripples(pix, events, t, position, state):
     """One brief spatial pulse per genuine event, delayed by physical distance.
 
@@ -414,7 +456,11 @@ def _apply_ripples(pix, events, t, position, state):
         # A spatial crest re-coloured every pixel and tore under the budget.
         k = envelope * 0.8 * strength_cap
         if k > 0.004:
-            for i in range(n):
+            # On a printing rope only the orange water takes the tint: re-tinting
+            # every ink band as well would change INK_BANDS+1 runs per tick for
+            # the whole ripple and tear the rope under the budget.
+            span = _water_span(pix) if state == 'printing' else n
+            for i in range(span):
                 pix[i] = _mix(pix[i], tint, k)
 
 

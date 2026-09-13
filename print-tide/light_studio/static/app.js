@@ -16,7 +16,7 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const STATE_TEXT = {
   idle:      ['Available',   'Free and ready. Resting cyan.'],
   preparing: ['Preparing',   'The printer reported PREPARE. Cyan sweep.'],
-  printing:  ['Printing',    'Orange fill rises through deep blue; drops fall into it.'],
+  printing:  ['Printing',    'Orange fill rises through ink that darkens towards the top; drops fall into it.'],
   paused:    ['Paused',      'Yellow breathing with a steady marker. Needs a look.'],
   error:     ['Error',       'Deep red breathing. The printer reported a print error.'],
   finished:  ['Collect',     'A smooth rainbow on completion, then steady green until the door opens or it is marked collected.'],

@@ -4,7 +4,7 @@ import unittest
 from light_studio.layout import DEFAULTS
 from light_studio.model import STATES
 from light_studio.renderer import (ACCENT_POSITIONS, ALARM_FLOOR, BRIGHT_CAP,
-                                   CELEBRATE_SECONDS, IDENTIFY_SECONDS, PIXELS,
+                                   CELEBRATE_SECONDS, IDENTIFY_SECONDS, INK_BANDS, PIXELS,
                                    QUANT, RIPPLE_DELAY, RIPPLE_SECONDS,
                                    SPLASH_SECONDS, STATUS_POSITIONS,
                                    droplet_timing, render_rope)
@@ -73,9 +73,17 @@ class DistinctnessTests(unittest.TestCase):
             self.assertLess(sum(p[0] for p in idle), sum(p[2] for p in idle))
 
     def test_offline_is_dim_and_never_shows_a_progress_edge(self):
+        # Averaged over the heartbeat cycle: a single instant sits on a thump or
+        # in the rest between them and says nothing about how dim offline is.
+        ticks = [k * 0.1 for k in range(24)]
+        offline_mean = sum(brightness(render_rope('offline', None, t, 0,
+                                                  {'brightness': 100}))
+                           for t in ticks) / len(ticks)
+        printing_mean = sum(brightness(render_rope('printing', 50, t, 0,
+                                                   {'brightness': 100}))
+                            for t in ticks) / len(ticks)
+        self.assertLess(offline_mean, printing_mean)
         offline = render_rope('offline', None, 0.5, 0, {'brightness': 100})
-        printing = render_rope('printing', 50, 0.5, 0, {'brightness': 100})
-        self.assertLess(brightness(offline), brightness(printing))
         self.assertEqual(len({tuple(p) for p in offline[:40]}
                              & {tuple(p) for p in offline[60:]}), 1)
 
@@ -160,13 +168,32 @@ class BlueGreenTests(unittest.TestCase):
                            dict({'brightness': 100, 'reduced_motion': True},
                                 **settings))
 
-    def test_zero_percent_is_entirely_blue(self):
+    def test_zero_percent_is_entirely_ink(self):
         frame = self.bar(0)
-        self.assertEqual(len(set(tuple(p) for p in frame)), 1)
-        blue = frame[0]
-        self.assertEqual(blue[0], 0)
-        self.assertGreater(blue[2], blue[1])
-        self.assertGreater(blue[2], 100)
+        self.assertEqual(len(set(tuple(p) for p in frame)), INK_BANDS)
+        for blue in frame:
+            self.assertEqual(blue[0], 0)
+            self.assertGreater(blue[2], blue[1])
+        self.assertGreater(frame[0][2], 100)
+
+    def test_the_remainder_is_ink_shades_getting_progressively_darker(self):
+        """Adi, 2026-09-13: 'different shades of ink ... progressively darker'.
+        Deep blue at the waterline, INK_BANDS distinct shades, each darker than
+        the one before it, the darkest still clearly lit."""
+        for percent in (0, 10, 33, 50, 75, 90):
+            frame = self.bar(percent)
+            fill = round(percent / 100 * STATUS_POSITIONS)
+            rest = [tuple(p) for p in frame[fill:STATUS_POSITIONS]]
+            shades = []
+            for pixel in rest:
+                if not shades or shades[-1] != pixel:
+                    shades.append(pixel)
+            self.assertEqual(len(shades), INK_BANDS, (percent, shades))
+            self.assertEqual(len(set(shades)), INK_BANDS, (percent, shades))
+            for lighter, darker in zip(shades, shades[1:]):
+                self.assertGreater(sum(lighter), sum(darker), (percent, shades))
+                self.assertGreater(lighter[2], darker[2], (percent, shades))
+            self.assertGreater(sum(shades[-1]), 40, shades[-1])
 
     def test_a_printing_rope_never_shows_a_pure_red_pixel(self):
         """Red means error and nothing else on this wall. The orange fill is
@@ -208,11 +235,11 @@ class BlueGreenTests(unittest.TestCase):
                 self.assertGreater(frame[i][2], frame[i][1], (percent, i))
                 self.assertEqual(frame[i][0], 0, (percent, i))
 
-    def test_each_zone_is_a_single_solid_colour(self):
+    def test_the_water_is_a_single_solid_colour_and_the_ink_is_banded(self):
         frame = self.bar(50)
         fill = round(0.5 * STATUS_POSITIONS)
         self.assertEqual(len(set(tuple(p) for p in frame[:fill])), 1)
-        self.assertEqual(len(set(tuple(p) for p in frame[fill:])), 1)
+        self.assertEqual(len(set(tuple(p) for p in frame[fill:])), INK_BANDS)
 
     def test_no_pixel_of_a_printing_rope_is_ever_dark(self):
         """The old blue remainder quantized to near-black and read as 'off'."""
@@ -222,11 +249,14 @@ class BlueGreenTests(unittest.TestCase):
                                          {'brightness': 100}):
                     self.assertGreater(sum(pixel), 40, (percent, t, pixel))
 
-    def test_a_solid_bar_costs_only_two_messages(self):
-        """Two contiguous runs is why the original never hit its budget."""
+    def test_a_still_bar_is_one_run_per_zone_and_fits_a_single_tick(self):
+        """Water plus INK_BANDS ink bands: the whole base paints in one tick and
+        then holds still, so it costs nothing between percent changes."""
+        from light_studio import transport as tp
         frame = self.bar(40)
         runs = 1 + sum(1 for a, b in zip(frame, frame[1:]) if a != b)
-        self.assertEqual(runs, 2)
+        self.assertEqual(runs, 1 + INK_BANDS)
+        self.assertLessEqual(runs, tp.MAX_MSGS_PER_NODE_TICK)
 
 
 class MotionTests(unittest.TestCase):
