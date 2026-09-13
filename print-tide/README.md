@@ -134,17 +134,17 @@ first paint, apart from the ordinary 12-second resync.
 
 ## What the colours mean
 
-Every colour on the ropes is a shade of pink (2026-09-13); states are told apart by lightness, saturation and motion.
+Every colour on the ropes is a shade of pink, never white or pastel (2026-09-13); states are told apart by lightness, saturation and motion.
 
 | State | Look | Trigger |
 | --- | --- | --- |
-| Available | solid resting mid rose, no motion | `IDLE`/`READY`, fresh |
+| Available | solid resting dusty rose, no motion | `IDLE`/`READY`, fresh |
 | Preparing | light-pink sweep rising through a dark pink body | `PREPARE` only — never inferred from temperature |
-| Printing | full pink theme: pastel-pink filled region, remainder in six bands of pink darkening from hot pink at the waterline towards the top, near-white droplets and splashes, across the 90-position region | `RUNNING` |
-| Paused | light pink breathing with steady near-white marks at both ends | `PAUSE` |
+| Printing | hot-pink filled region, remainder in six bands of pink darkening from deep pink at the waterline towards the top, light-pink droplets and splashes, across the 90-position region | `RUNNING` |
+| Paused | light pink breathing with steady deep-pink marks at both ends | `PAUSE` |
 | Error | deep fuchsia breathing, the most saturated pink on the wall (almost no green) | `print_error` set (any gcode state) |
 | Stopped early | steady deep plum until the door opens or **Mark collected** | `FAILED` with `print_error` cleared (cancel, or a dismissed failure) |
-| Collect | 12 s smooth pink wash (one hue per tick, sweeping magenta-pink to rose and back) cross-fading into the lightest near-white pink, held until the door opens or **Mark collected** | observed completion (wash), or retained `FINISH` (collect pink only) |
+| Collect | 12 s smooth pink wash (one hue per tick, sweeping magenta-pink to rose and back) cross-fading into the lightest pink, held until the door opens or **Mark collected** | observed completion (wash), or retained `FINISH` (collect pink only) |
 | Offline | dim mauve double-thump heartbeat | link down, no timestamp, stale >120 s, or a future timestamp |
 | Unknown | pale greyish-pink dashes | connected, but the reported state is not one we recognise |
 

@@ -14,12 +14,12 @@ const clone = o => JSON.parse(JSON.stringify(o));
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
 const STATE_TEXT = {
-  idle:      ['Available',   'Free and ready. Resting mid rose, no motion.'],
+  idle:      ['Available',   'Free and ready. Resting dusty rose, no motion.'],
   preparing: ['Preparing',   'The printer reported PREPARE. Light-pink sweep through a dark pink body.'],
-  printing:  ['Printing',    'Pastel-pink fill rises through pinks that darken towards the top; near-white drops fall into it.'],
-  paused:    ['Paused',      'Light pink breathing with steady near-white marks. Needs a look.'],
+  printing:  ['Printing',    'Hot-pink fill rises through pinks that darken towards the top; light-pink drops fall into it.'],
+  paused:    ['Paused',      'Light pink breathing with steady deep-pink marks. Needs a look.'],
   error:     ['Error',       'Deep fuchsia breathing, the most saturated pink on the wall. The printer reported a print error.'],
-  finished:  ['Collect',     'A smooth pink wash on completion, then the lightest near-white pink until the door opens or it is marked collected.'],
+  finished:  ['Collect',     'A smooth pink wash on completion, then the lightest pink until the door opens or it is marked collected.'],
   stopped:   ['Stopped',     'Cancelled or failed and dismissed. Steady deep plum until the door opens or it is marked collected.'],
   offline:   ['Offline',     'No fresh telemetry. Dim mauve heartbeat, no percentage.'],
   unknown:   ['Unknown',     'Connected, but the reported state is not one we recognise. Pale pink dashes.'],

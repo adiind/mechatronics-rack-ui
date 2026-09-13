@@ -76,10 +76,12 @@ class DistinctnessTests(unittest.TestCase):
         error = render_rope('error', None, 3.0, 0, {'brightness': 100})[10]
         paused = render_rope('paused', None, 3.0, 0, {'brightness': 100})[10]
         self.assertLess(error[1], error[0] * 0.15)
-        self.assertGreater(paused[1], paused[0] * 0.5)
+        self.assertGreater(paused[1], paused[0] * 0.35)
 
     def test_every_lit_pixel_of_every_state_is_a_shade_of_pink(self):
-        """Adi, 2026-09-13: 'REPLACE EVERY COLOR WITH A SHADE OF PINK'."""
+        """Adi, 2026-09-13: 'REPLACE EVERY COLOR WITH A SHADE OF PINK' and
+        'I DONT WANT WHITE, JUST SHADES OF PINK': is_pink rejects pastel and
+        near-white as well as every other hue."""
         for state in STATES:
             for t in (0.0, 0.3, 1.1, 2.6, 5.0, 9.7):
                 for since in (None, 1.0, 4.0, CELEBRATE_SECONDS + 1):
@@ -117,8 +119,9 @@ class DistinctnessTests(unittest.TestCase):
         lit = [p for p in unknown if sum(p) > 0]
         self.assertTrue(lit)
         self.assertGreater(len({tuple(p) for p in unknown}), 1, 'unknown is dashed')
-        for pixel in lit:                      # washed out: low saturation
-            self.assertLess(max(pixel) - min(pixel), max(pixel) * 0.4)
+        for pixel in lit:                      # washed out, but still pink
+            self.assertLess(max(pixel) - min(pixel), max(pixel) * 0.5)
+            self.assertTrue(is_pink(pixel), pixel)
 
 
 class ProgressTests(unittest.TestCase):
@@ -186,9 +189,10 @@ class ProgressTests(unittest.TestCase):
 
 
 class PinkThemeTests(unittest.TestCase):
-    """A running print: pastel-pink fill under a remainder of progressively
-    darker pinks (Adi, 2026-09-13: "a full pink theme"). Pure red is reserved
-    for the error state (2026-09-12: a red default read as an alarm)."""
+    """A running print: hot-pink fill under a remainder of progressively
+    darker pinks (Adi, 2026-09-13: "a full pink theme", no white). Pure red
+    is reserved for the error state (2026-09-12: a red default read as an
+    alarm)."""
 
     def bar(self, percent, t=0.0, **settings):
         return render_rope('printing', percent, t, 0,
@@ -224,15 +228,15 @@ class PinkThemeTests(unittest.TestCase):
             self.assertGreater(sum(shades[-1]), 40, shades[-1])
 
     def test_a_printing_rope_never_shows_a_pure_red_pixel(self):
-        """Red means error and nothing else on this wall. Every pink is
-        red-led, so every red-led pixel must carry a clear green component."""
+        """Red means error and nothing else on this wall. Every lit pixel of a
+        printing rope, drop and marker included, is a pink with blue well up
+        against red, so none of it can read as red."""
         for percent in (None, 0, 5, 27, 50, 99, 100):
             for t in (0.0, 0.7, 2.3, 5.5, 9.1):
                 for pixel in render_rope('printing', percent, t, 0,
                                          {'brightness': 100}):
-                    if pixel[0] > pixel[1] and pixel[0] > pixel[2]:
-                        self.assertGreaterEqual(pixel[1], pixel[0] * 0.35,
-                                                (percent, t, pixel))
+                    if sum(pixel):
+                        self.assertTrue(is_pink(pixel), (percent, t, pixel))
 
     def test_error_body_is_deep_saturated_fuchsia(self):
         """The alarm pink: strong red and blue, almost no green, across the breath."""
@@ -245,15 +249,14 @@ class PinkThemeTests(unittest.TestCase):
                 self.assertLess(pixel[1], pixel[0] * 0.12, (t, pixel))
                 self.assertGreater(pixel[2], pixel[0] * 0.3, (t, pixel))
 
-    def test_one_hundred_percent_is_entirely_pastel_pink(self):
+    def test_one_hundred_percent_is_entirely_hot_pink(self):
         frame = self.bar(100)
         self.assertEqual(len(set(tuple(p) for p in frame)), 1)
-        pastel = frame[0]
-        self.assertGreater(pastel[0], pastel[2])
-        self.assertGreater(pastel[2], pastel[1])
-        self.assertGreater(pastel[1], 120, 'the water is a light pink, not a hot one')
+        water = frame[0]
+        self.assertTrue(is_pink(water), water)
+        self.assertGreater(water[0], 200, 'the water is bright')
 
-    def test_the_bar_is_pastel_below_the_waterline_and_hot_pink_above(self):
+    def test_the_bar_is_hot_pink_below_the_waterline_and_deeper_above(self):
         for percent in (10, 25, 50, 75, 90):
             frame = self.bar(percent)
             fill = round(percent / 100 * STATUS_POSITIONS)
@@ -264,8 +267,9 @@ class PinkThemeTests(unittest.TestCase):
                 r, g, b = frame[i]
                 self.assertGreater(r, b, (percent, i))
                 self.assertGreater(b, g, (percent, i))
-                # Every remainder shade is deeper than the pastel water.
+                # Every remainder shade is deeper than the water.
                 self.assertLess(g, water[1] - 30, (percent, i))
+                self.assertLess(sum(frame[i]), sum(water), (percent, i))
 
     def test_the_water_is_a_single_solid_colour_and_the_remainder_is_banded(self):
         frame = self.bar(50)
@@ -383,10 +387,9 @@ class CelebrationTests(unittest.TestCase):
         self.assertNotEqual(rest, render_rope('idle', None, 1.0, 0, {}),
                             'ready-to-collect must be distinguishable from idle')
         self.assertEqual(len({tuple(p) for p in rest}), 1)
-        # The lightest pink on the wall: near white, blue over green.
-        self.assertGreater(rest[0][0], rest[0][2])
-        self.assertGreater(rest[0][2], rest[0][1])
-        self.assertGreater(rest[0][1], rest[0][0] * 0.75)
+        # The lightest pink on the wall, but still clearly pink, never white.
+        self.assertTrue(is_pink(rest[0]), rest[0])
+        self.assertGreater(rest[0][1], rest[0][0] * 0.45)
 
     def test_stopped_is_a_steady_deep_plum_unlike_idle_and_collect(self):
         frame = render_rope('stopped', None, 3.0, 0, {'brightness': 100})
@@ -413,7 +416,7 @@ class CelebrationTests(unittest.TestCase):
                                 since_complete=since)
             for pixel in frame[:STATUS_POSITIONS]:
                 self.assertTrue(is_pink(pixel), (since, pixel))
-                self.assertGreater(min(pixel), 150, (since, pixel))
+                self.assertGreater(min(pixel), 100, (since, pixel))
 
 
 class IdentifyTests(unittest.TestCase):
