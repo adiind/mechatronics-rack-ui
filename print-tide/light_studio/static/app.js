@@ -14,15 +14,15 @@ const clone = o => JSON.parse(JSON.stringify(o));
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
 const STATE_TEXT = {
-  idle:      ['Available',   'Free and ready. Resting cyan.'],
-  preparing: ['Preparing',   'The printer reported PREPARE. Cyan sweep.'],
-  printing:  ['Printing',    'Orange fill rises through ink that darkens towards the top; drops fall into it.'],
-  paused:    ['Paused',      'Yellow breathing with a steady marker. Needs a look.'],
-  error:     ['Error',       'Deep red breathing. The printer reported a print error.'],
-  finished:  ['Collect',     'A smooth rainbow on completion, then steady green until the door opens or it is marked collected.'],
-  stopped:   ['Stopped',     'Cancelled or failed and dismissed. Steady magenta until the door opens or it is marked collected.'],
-  offline:   ['Offline',     'No fresh telemetry. Dim purple heartbeat, no percentage.'],
-  unknown:   ['Unknown',     'Connected, but the reported state is not one we recognise.'],
+  idle:      ['Available',   'Free and ready. Resting mid rose, no motion.'],
+  preparing: ['Preparing',   'The printer reported PREPARE. Light-pink sweep through a dark pink body.'],
+  printing:  ['Printing',    'Pastel-pink fill rises through pinks that darken towards the top; near-white drops fall into it.'],
+  paused:    ['Paused',      'Light pink breathing with steady near-white marks. Needs a look.'],
+  error:     ['Error',       'Deep fuchsia breathing, the most saturated pink on the wall. The printer reported a print error.'],
+  finished:  ['Collect',     'A smooth pink wash on completion, then the lightest near-white pink until the door opens or it is marked collected.'],
+  stopped:   ['Stopped',     'Cancelled or failed and dismissed. Steady deep plum until the door opens or it is marked collected.'],
+  offline:   ['Offline',     'No fresh telemetry. Dim mauve heartbeat, no percentage.'],
+  unknown:   ['Unknown',     'Connected, but the reported state is not one we recognise. Pale pink dashes.'],
 };
 const SIM_STATES = Object.keys(STATE_TEXT);
 

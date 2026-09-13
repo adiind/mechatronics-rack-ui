@@ -64,7 +64,7 @@ class HealthTests(unittest.TestCase):
         self.assertEqual(self.studio.view()['ropes']['node02']['receipt'], 'silent')
 
     def test_offline_status_wins_and_online_return_forces_repaint(self):
-        # A first paint of water + ink bands + droplet can spill into a second
+        # A first paint of water + pink bands + droplet can spill into a second
         # tick under the per-tick message cap; two ticks always complete it.
         self.studio.tick()
         self.clock.t += 1 / TICK_HZ

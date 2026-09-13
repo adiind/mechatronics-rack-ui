@@ -154,53 +154,60 @@ def _block(pix, start, count, colour):
 
 # ------------------------------------------------------------------- palettes
 
-DEEP = (0, 26, 80)         # unlit water (idle swell)
-MID = (0, 80, 150)
-TEAL = (0, 150, 170)
-CREST = (110, 255, 255)
-PREP = (0, 232, 255)
-FILL_LOW = (0, 118, 68)
-FILL_HIGH = (0, 196, 124)
-WATERLINE = (150, 255, 214)
-DROPLET = (120, 220, 255)
-SPLASH = (225, 255, 240)
+# Everything on the ropes is a shade of pink (Adi, 2026-09-13: "REPLACE EVERY
+# COLOR WITH A SHADE OF PINK"). States are told apart by lightness, saturation
+# and motion instead of hue: the printed water is pastel, the remainder bands
+# darken towards the top, ready-to-collect is the lightest near-white pink and
+# static, idle is a static mid rose, paused breathes a light pink, error
+# breathes the deepest most saturated fuchsia, stopped-early is a static deep
+# plum, offline a dim mauve heartbeat, unknown pale greyish-pink dashes. Every
+# colour here is red-led with blue over green (pink, never orange or red).
 
-# The printing palette: orange fill rising through deep-blue unlit water, with
-# an orange drop falling into it. The remainder used to be red (the original
-# NodeAnimator), which made a normal print look like an alarm from across the
-# room; red now belongs to the error state alone (Adi, 2026-09-12). The fill
-# was green until 2026-09-13, when Adi found green-on-blue too similar from
-# across the room and asked for "orangish" progress.
-COL_PRINT = (255, 110, 0)    # printed portion / the water: orange
-COL_REST = (0, 56, 200)      # the not-yet-printed remainder at the waterline: deep blue
-#: The remainder is drawn as INK_BANDS shades of ink, deep blue at the
-#: waterline darkening step by step to COL_INK towards the top of the rope
-#: (Adi, 2026-09-13: "different shades of ink ... progressively darker"). Banded
-#: rather than a smooth gradient so the base stays a handful of runs; the
-#: darkest shade is kept well clear of the "reads as off" floor.
-COL_INK = (0, 20, 96)
-INK_BANDS = 6
-COL_DROP = (255, 110, 0)     # raindrop, same orange as the water
-#: The splash is a paler orange so the landing reads against the fill.
-COL_SPLASH = (255, 210, 130)
-#: Paused breathes yellow, not amber: amber sat right next to the orange fill.
-AMBER = (255, 210, 0)
-AMBER_MARK = (255, 240, 170)
-ANGRY = (255, 0, 0)          # error body: pure deep red, no orange
-ANGRY_MARK = (255, 235, 220)
-#: Ready to collect: a finished print rests in steady green until someone opens
-#: the door or marks it collected. Green is free for this now that progress is
-#: orange, and it is the one colour that says "done, come get it".
-GREEN = (0, 198, 84)
-GREEN_BRIGHT = (170, 255, 200)
-#: Stopped early: a cancelled or failed print whose error has been dismissed
-#: but whose bed has not been cleared. Magenta is used nowhere else.
-MAGENTA = (255, 0, 120)
-SLATE = (120, 100, 215)
-GREY = (150, 150, 160)
-#: The resting look: nothing to say, so plain cyan. Used for 'idle' only; a
-#: finished bay rests in GREEN until collected. Static, so it costs nothing.
-CYAN = (0, 220, 240)
+# The printing palette: a bright pastel water, SHADE_BANDS bands of hot pink
+# darkening step by step towards the top, a near-white drop that reads against
+# every band. Banded rather than a smooth gradient so the base stays a handful
+# of runs; the darkest shade is kept well clear of the "reads as off" floor.
+COL_PRINT = (255, 165, 205)  # printed portion / the water: bright pastel pink
+COL_REST = (255, 110, 180)   # remainder at the waterline: hot pink
+COL_DEEP_PINK = (92, 40, 65) # remainder at the top: darkest pink
+SHADE_BANDS = 6
+COL_DROP = (255, 225, 240)   # raindrop: near-white pink, visible on every band
+COL_SPLASH = (255, 245, 250)
+#: Preparing: a dark pink body with a light-pink sweep rising through it.
+PREP_LOW = (48, 14, 34)
+PREP_HIGH = (104, 34, 74)
+PREP = (255, 200, 228)
+#: Paused: breathing light pink with steady near-white marks at both ends.
+AMBER = (255, 175, 215)
+AMBER_MARK = (255, 240, 248)
+#: Error: the deepest, most saturated pink on the wall, breathing. Almost no
+#: green so it is the only "hot" colour; nothing healthy comes near it.
+ANGRY = (255, 15, 110)
+ANGRY_MARK = (255, 235, 245)
+#: Ready to collect: the lightest pink, static, held until the door opens or
+#: the bay is marked collected.
+GREEN = (255, 215, 232)
+GREEN_BRIGHT = (255, 245, 250)
+#: Stopped early: static deep plum pink, dimmer at both ends.
+MAGENTA = (165, 45, 105)
+#: Offline heartbeat: dim mauve pink.
+SLATE = (150, 85, 130)
+#: Unknown: pale greyish pink dashes.
+GREY = (170, 130, 150)
+#: The resting look for 'idle': a static mid rose.
+CYAN = (215, 90, 150)
+#: Identify: a mid pink body pulsing with a near-white core.
+IDENT_BODY = (255, 120, 190)
+IDENT_CORE = (255, 235, 245)
+#: Ripple tints: near-white for a completion, a deep rose for anything else.
+#: Both sit far enough from the pastel water to survive quantization at the
+#: default brightness, so a ripple is always visible on a printing rope.
+RIPPLE_COMPLETE = (255, 245, 250)
+RIPPLE_OTHER = (200, 60, 140)
+#: The "rainbow" accent and the completion wash stay inside the pink hues:
+#: from magenta-pink round to rose, swept back and forth so there is no jump.
+PINK_HUE_LOW = 0.80
+PINK_HUE_HIGH = 0.97
 
 
 # --------------------------------------------------------------- state scenes
@@ -213,22 +220,22 @@ SWELL_STEPS = 5
 
 
 def _idle(n, T, wall):
-    """The default: solid resting cyan. No motion, so no transport cost.
+    """The default: a solid resting rose. No motion, so no transport cost.
 
-    Replaced the subdued water on 2026-09-06 at Adi's request: the "nothing"
-    state is just cyan, and a finished print settles into the same look after
-    its rainbow.
+    The "nothing" state is one static colour (Adi, 2026-09-06), pink like
+    everything else since 2026-09-13.
     """
     return [CYAN for _ in range(n)]
 
 
 def _preparing(n, T, wall):
-    """Cyan rising sweep. Only ever shown when telemetry actually says PREPARE.
+    """Light-pink sweep rising through a dark pink body. Only ever shown when
+    telemetry actually says PREPARE.
 
     Uniform body plus one flat sweep block: two runs change per tick.
     """
     breath = 0.5 + 0.5 * math.sin(T * 0.8 + wall)
-    body = _mix((0, 12, 26), (0, 46, 66), 0.25 + 0.35 * breath)
+    body = _mix(PREP_LOW, PREP_HIGH, 0.25 + 0.35 * breath)
     pix = [body for _ in range(n)]
     span = n + 30
     centre = math.floor(((T * 8.0 + wall * 4.0) % span) - 15)
@@ -248,18 +255,18 @@ def droplet_timing(travel, speed=DROP_SPEED):
     return fall, max(MIN_DROP_CYCLE, fall + SPLASH_SECONDS + DROP_GAP)
 
 
-def ink_shade(band):
-    """Colour of ink band ``band`` (0 = at the waterline, INK_BANDS-1 = top)."""
-    band = max(0, min(INK_BANDS - 1, band))
-    return _mix(COL_REST, COL_INK, band / (INK_BANDS - 1))
+def shade(band):
+    """Colour of pink band ``band`` (0 = at the waterline, SHADE_BANDS-1 = top)."""
+    band = max(0, min(SHADE_BANDS - 1, band))
+    return _mix(COL_REST, COL_DEEP_PINK, band / (SHADE_BANDS - 1))
 
 
-def _ink(pix, fill):
-    """Paint the remainder above ``fill`` as INK_BANDS equal bands of ink.
+def _shades(pix, fill):
+    """Paint the remainder above ``fill`` as SHADE_BANDS equal bands of pink.
 
     Band boundaries are relative to the waterline so the shade nearest the water
-    is always the deep blue and the far end is always the darkest ink, whatever
-    the percentage. They only move when the percent does, so between updates the
+    is always the hot pink and the far end is always the darkest, whatever the
+    percentage. They only move when the percent does, so between updates the
     whole base is free on the wire.
     """
     n = len(pix)
@@ -267,27 +274,28 @@ def _ink(pix, fill):
     if rest <= 0:
         return
     for i in range(fill, n):
-        band = min(INK_BANDS - 1, (i - fill) * INK_BANDS // rest)
-        pix[i] = ink_shade(band)
+        band = min(SHADE_BANDS - 1, (i - fill) * SHADE_BANDS // rest)
+        pix[i] = shade(band)
 
 
 def _printing(n, T, percent, marks, still=False):
     """The original 'bucket filling with rain', reproduced.
 
     Behavioural reference is ``NodeAnimator`` in reference/server.py: the
-    printed portion is solid orange, the remainder ink -- deep blue at the
-    waterline stepping through INK_BANDS progressively darker shades towards the
-    top -- and while the print runs an orange drop falls from the top into the
-    water with a brief splash. 0% is entirely ink, 100% entirely orange. Red is
-    reserved for errors so a healthy print can never be mistaken for one.
+    printed portion is solid pastel pink, the remainder hot pink at the
+    waterline stepping through SHADE_BANDS progressively darker pinks towards
+    the top, and while the print runs a near-white drop falls from the top into
+    the water with a brief splash. 0% is entirely shaded pink, 100% entirely
+    pastel. Red is reserved for errors so a healthy print can never be mistaken
+    for one.
 
     Solid zones are the cheapest thing this transport can carry -- the base is
-    one ``range`` for the water plus one per ink band, all of which hold still
+    one ``range`` for the water plus one per band, all of which hold still
     between percent changes, and a moving drop is two ``pixel`` messages.
 
     ``percent is None`` means the printer says RUNNING but has not told us how
     far along it is. That must not be drawn as 0%, which would be a full blue
-    bar, so it gets an explicit travelling orange marker instead.
+    bar, so it gets an explicit travelling pastel marker instead.
     """
     if percent is None:
         pix = [_scale(COL_PRINT, 0.28) for _ in range(n)]
@@ -298,10 +306,10 @@ def _printing(n, T, percent, marks, still=False):
 
     fill = max(0, min(n, int(round(percent / 100.0 * n))))
     pix = [COL_PRINT for _ in range(n)]
-    _ink(pix, fill)
+    _shades(pix, fill)
 
     # One drop per cycle, falling from the top down into the water. It is only
-    # drawn above the waterline, so it never eats into the orange fill.
+    # drawn above the waterline, so it never eats into the pastel fill.
     travel = (n - 1) - fill
     if travel > 2 and not still:
         fall, cycle = droplet_timing(travel)
@@ -316,7 +324,7 @@ def _printing(n, T, percent, marks, still=False):
 
 
 def _paused(n, T):
-    """Yellow breathing plus a stable marker that does not breathe."""
+    """Light-pink breathing plus stable near-white marks that do not breathe."""
     breath = 0.45 + 0.35 * (0.5 + 0.5 * math.sin(T * 1.2))
     pix = [_scale(AMBER, breath) for _ in range(n)]
     _block(pix, 0, 4, AMBER_MARK)               # steady amber marks at both ends;
@@ -325,10 +333,11 @@ def _paused(n, T):
 
 
 def _error(n, T):
-    """Deep red breathing: deeper and slower than pause, never a strobe.
+    """Deep fuchsia breathing: deeper and faster than pause, never a strobe.
 
-    Pure red, no orange tint, so it cannot be confused with the yellow pause or
-    with anything a healthy print shows (orange fill, blue remainder).
+    The most saturated pink on the wall with almost no green, so it cannot be
+    confused with the light breathing pause or with anything a healthy print
+    shows (pastel fill, softer pink remainder).
 
     One uniform run plus two steady end marks. The earlier five 'hot ticks'
     split the body into five runs that all changed every tick, which needed
@@ -342,19 +351,19 @@ def _error(n, T):
 
 
 def _finished(n, T, since_complete):
-    """Smooth rainbow wash on a genuine completion, then steady collect-green.
+    """Smooth pink wash on a genuine completion, then the steady collect pink.
 
-    The whole rope carries one hue that turns through the spectrum: one run per
-    tick, so it stays smooth under the message budget where a spatial rainbow
-    would tear. Over the last RAINBOW_FADE seconds it cross-fades into GREEN so
-    the hand-off to "ready to collect" has no visible step. The green holds
-    until the door is opened or the bay is marked collected, at which point the
-    studio reports the bay as idle (cyan).
+    The whole rope carries one hue that sweeps back and forth through the pink
+    range: one run per tick, so it stays smooth under the message budget where
+    a spatial gradient would tear. Over the last RAINBOW_FADE seconds it
+    cross-fades into the near-white collect pink so the hand-off has no visible
+    step. That holds until the door is opened or the bay is marked collected,
+    at which point the studio reports the bay as idle.
     """
     if since_complete is not None and 0 <= since_complete < CELEBRATE_SECONDS:
         hue = (since_complete / CELEBRATE_SECONDS) * RAINBOW_CYCLES
         hue = math.floor(hue * RAINBOW_STEPS) / RAINBOW_STEPS
-        colour = _hue_rgb(hue)
+        colour = _pink_hue_rgb(hue)
         remaining = CELEBRATE_SECONDS - since_complete
         if remaining < RAINBOW_FADE:
             colour = _mix(colour, GREEN, 1.0 - remaining / RAINBOW_FADE)
@@ -363,12 +372,12 @@ def _finished(n, T, since_complete):
 
 
 def _stopped(n, T):
-    """Steady magenta: the print stopped early and the bed still needs clearing.
+    """Steady deep plum: the print stopped early and the bed still needs clearing.
 
     Bambu keeps ``gcode_state=FAILED`` after a cancel or a dismissed failure
     until the next job starts. This is that window. One static run, so it costs
-    nothing to hold, and a colour no other state uses so it cannot be read as
-    an error (red), a pause (yellow) or a completion (green).
+    nothing to hold; darker than idle, lighter than nothing else static, and it
+    never breathes, so it is not an error, a pause or a completion.
     """
     pix = [MAGENTA for _ in range(n)]
     _block(pix, 0, 3, _scale(MAGENTA, 0.45))
@@ -377,7 +386,7 @@ def _stopped(n, T):
 
 
 def _offline(n, T):
-    """Dim slate/purple double-thump heartbeat. Never shows a stale percentage."""
+    """Dim mauve double-thump heartbeat. Never shows a stale percentage."""
     cycle = 2.4
     phase = T % cycle
     thump = max(_bump(abs(phase - 0.10), 0.22), 0.62 * _bump(abs(phase - 0.44), 0.20))
@@ -390,7 +399,7 @@ def _offline(n, T):
 
 
 def _unknown(n, T):
-    """Neutral grey dashes: state absent, and explicitly not 'available'."""
+    """Pale greyish-pink dashes: state absent, and explicitly not 'available'."""
     pulse = 0.62 + 0.20 * (0.5 + 0.5 * math.sin(T * 0.45))
     pix = []
     for i in range(n):
@@ -400,13 +409,13 @@ def _unknown(n, T):
 
 
 def _identify(n, age):
-    """Three bounded cyan/white pulses with a sweeping core. Unmistakable."""
+    """Three bounded pink pulses with a sweeping near-white core. Unmistakable."""
     per = IDENTIFY_SECONDS / IDENTIFY_PULSES
     phase = (age % per) / per
     env = math.sin(phase * math.pi) ** 2 if phase < 0.62 else 0.0
-    pix = [_scale((0, 210, 235), 0.10 + 0.90 * env) for _ in range(n)]
+    pix = [_scale(IDENT_BODY, 0.10 + 0.90 * env) for _ in range(n)]
     if env > 0.05:
-        _sprite(pix, phase / 0.62 * (n - 1), 4.0, (255, 255, 255), 1.0)
+        _sprite(pix, phase / 0.62 * (n - 1), 4.0, IDENT_CORE, 1.0)
     return pix
 
 
@@ -426,11 +435,35 @@ SCENES = {
 
 # ---------------------------------------------------------------- composition
 
+#: Green-to-red ratios bounding the pastel water: the hot-pink shades above it
+#: sit below the floor, the near-white drop, splash and collect pink above the
+#: ceiling. Ratios, not levels, so the test holds at any brightness.
+WATER_RATIO_FLOOR = (COL_PRINT[1] / COL_PRINT[0] + COL_REST[1] / COL_REST[0]) / 2
+WATER_RATIO_CEILING = (COL_PRINT[1] / COL_PRINT[0] + COL_DROP[1] / COL_DROP[0]) / 2
+
+
+def is_water(pixel):
+    """True for a pixel of the printed (pastel) water, false for any shade."""
+    r, g, _ = pixel
+    return r > 0 and WATER_RATIO_FLOOR <= g / r <= WATER_RATIO_CEILING
+
+
+def is_pink(pixel):
+    """A shade of pink: red-led, blue at least level with green, and lit.
+
+    Near-white pinks (drop, splash, collect, marks) qualify because their blue
+    still sits over their green; pure white, grey, red, orange, yellow, green,
+    cyan and blue do not.
+    """
+    r, g, b = pixel
+    return r > 0 and r >= b > g
+
+
 def _water_span(pix):
-    """Length of the leading orange-led run (the printed water) of a frame."""
+    """Length of the leading pastel run (the printed water) of a frame."""
     span = 0
-    for r, g, b in pix:
-        if not (r > g and r > b):
+    for pixel in pix:
+        if not is_water(pixel):
             break
         span += 1
     return span
@@ -450,14 +483,14 @@ def _apply_ripples(pix, events, t, position, state):
         if not 0.0 <= age < RIPPLE_SECONDS:
             continue
         envelope = math.sin(age / RIPPLE_SECONDS * math.pi) ** 2
-        tint = (40, 235, 155) if event.get('kind') == 'complete' else (60, 155, 255)
+        tint = RIPPLE_COMPLETE if event.get('kind') == 'complete' else RIPPLE_OTHER
         # Uniform per rope: the wall-scale motion comes from the per-bay delay,
         # and a uniform tint keeps the rope's run count unchanged while it passes.
         # A spatial crest re-coloured every pixel and tore under the budget.
         k = envelope * 0.8 * strength_cap
         if k > 0.004:
-            # On a printing rope only the orange water takes the tint: re-tinting
-            # every ink band as well would change INK_BANDS+1 runs per tick for
+            # On a printing rope only the water takes the tint: re-tinting
+            # every pink band as well would change SHADE_BANDS+1 runs per tick for
             # the whole ripple and tear the rope under the budget.
             span = _water_span(pix) if state == 'printing' else n
             for i in range(span):
@@ -551,6 +584,17 @@ def _hue_rgb(hue):
     return (r * 255.0, g * 255.0, b * 255.0)
 
 
+def _pink_hue_rgb(cycle):
+    """Fully saturated RGB for a point in the pink sweep.
+
+    ``cycle`` in [0, 1) is one full back-and-forth through the pink hues: a
+    cosine sweep from PINK_HUE_LOW up to PINK_HUE_HIGH and back, so the colour
+    never jumps when the cycle wraps.
+    """
+    k = 0.5 - 0.5 * math.cos((cycle % 1.0) * 2.0 * math.pi)
+    return _hue_rgb(PINK_HUE_LOW + (PINK_HUE_HIGH - PINK_HUE_LOW) * k)
+
+
 def _finalize_accent(pix, level):
     """Cap and quantize the accent.
 
@@ -594,7 +638,7 @@ def render_accent(accent=None, t=0.0, position=0, *, positions=ACCENT_POSITIONS,
         turns = 0.0 if still else t / RAINBOW_PERIOD
         hue = turns + position / 7.0
         hue = math.floor(hue * RAINBOW_STEPS) / RAINBOW_STEPS
-        base = _hue_rgb(hue)
+        base = _pink_hue_rgb(hue)
     elif mode == 'color':
         base = tuple(float(c) for c in cfg['color'])
     else:

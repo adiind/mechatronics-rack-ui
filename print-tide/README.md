@@ -134,17 +134,19 @@ first paint, apart from the ordinary 12-second resync.
 
 ## What the colours mean
 
+Every colour on the ropes is a shade of pink (2026-09-13); states are told apart by lightness, saturation and motion.
+
 | State | Look | Trigger |
 | --- | --- | --- |
-| Available | solid resting cyan, no motion (2026-09-06) | `IDLE`/`READY`, fresh |
-| Preparing | cyan sweep rising up the rope | `PREPARE` only — never inferred from temperature |
-| Printing | orange filled region, remainder in six bands of ink darkening from deep blue at the waterline towards the top, falling orange droplets and splashes, across the 90-position region | `RUNNING` |
-| Paused | yellow breathing with steady pale marks at both ends | `PAUSE` |
-| Error | deep red breathing, pure red with no orange | `print_error` set (any gcode state) |
-| Stopped early | steady magenta until the door opens or **Mark collected** | `FAILED` with `print_error` cleared (cancel, or a dismissed failure) |
-| Collect | 12 s smooth rainbow wash (one hue per tick, two full turns) cross-fading into steady green, held until the door opens or **Mark collected** | observed completion (rainbow), or retained `FINISH` (green only) |
-| Offline | dim slate/purple double-thump heartbeat | link down, no timestamp, stale >120 s, or a future timestamp |
-| Unknown | dim grey dashes | connected, but the reported state is not one we recognise |
+| Available | solid resting mid rose, no motion | `IDLE`/`READY`, fresh |
+| Preparing | light-pink sweep rising through a dark pink body | `PREPARE` only — never inferred from temperature |
+| Printing | full pink theme: pastel-pink filled region, remainder in six bands of pink darkening from hot pink at the waterline towards the top, near-white droplets and splashes, across the 90-position region | `RUNNING` |
+| Paused | light pink breathing with steady near-white marks at both ends | `PAUSE` |
+| Error | deep fuchsia breathing, the most saturated pink on the wall (almost no green) | `print_error` set (any gcode state) |
+| Stopped early | steady deep plum until the door opens or **Mark collected** | `FAILED` with `print_error` cleared (cancel, or a dismissed failure) |
+| Collect | 12 s smooth pink wash (one hue per tick, sweeping magenta-pink to rose and back) cross-fading into the lightest near-white pink, held until the door opens or **Mark collected** | observed completion (wash), or retained `FINISH` (collect pink only) |
+| Offline | dim mauve double-thump heartbeat | link down, no timestamp, stale >120 s, or a future timestamp |
+| Unknown | pale greyish-pink dashes | connected, but the reported state is not one we recognise |
 
 Error, pause, offline and unknown are never overwritten by cross-wall ripples,
 and error/pause keep a visibility floor even in quiet mode at low brightness.

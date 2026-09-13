@@ -13,7 +13,7 @@ from pathlib import Path
 from light_studio.layout import (DEFAULT_ACCENT, LayoutStore, SCHEMA,
                                  default_layout, validate, validate_accent)
 from light_studio.model import STATES
-from light_studio.renderer import (ACCENT_POSITIONS, ACCENT_QUIET_SCALE, BRIGHT_CAP,
+from light_studio.renderer import (ACCENT_POSITIONS, ACCENT_QUIET_SCALE, BRIGHT_CAP, is_water,
                                    PIXELS, QUANT, RAINBOW_PERIOD, RAINBOW_STEPS,
                                    STATUS_POSITIONS, compose_rope, render_accent,
                                    render_rope)
@@ -131,13 +131,16 @@ class RainbowTests(unittest.TestCase):
         self.assertGreaterEqual(changes, RAINBOW_STEPS // 2)
         self.assertLessEqual(changes / RAINBOW_PERIOD, 4.0)
 
-    def test_rainbow_covers_the_hue_circle(self):
+    def test_rainbow_sweeps_the_pink_hues_only(self):
+        # Adi, 2026-09-13: every colour on the wall is a shade of pink, the
+        # "rainbow" included. It still has to move through many distinct shades.
         colours = set(self._colours(RAINBOW_STEPS * 4))
-        self.assertGreater(len(colours), 20)
-        reds = [c for c in colours if c[0] > c[1] and c[0] > c[2]]
-        greens = [c for c in colours if c[1] > c[0] and c[1] > c[2]]
-        blues = [c for c in colours if c[2] > c[0] and c[2] > c[1]]
-        self.assertTrue(reds and greens and blues)
+        self.assertGreater(len(colours), 12)
+        for c in colours:
+            self.assertGreater(c[0], c[1], c)          # red-led ...
+            self.assertGreaterEqual(c[2], c[1], c)     # ... blue over green: pink
+        self.assertTrue(any(c[2] > c[0] * 0.6 for c in colours), 'reaches magenta-pink')
+        self.assertTrue(any(c[2] < c[0] * 0.35 for c in colours), 'reaches rose')
 
     def test_each_bay_is_offset_so_the_wall_reads_as_one_rainbow(self):
         first = render_accent(RAINBOW, 1.0, 0)[0]
@@ -342,7 +345,7 @@ class StudioAccentTests(Harness):
         for percent, expected in ((0, 0), (50, 45), (100, 90)):
             self.set('printer1', state='RUNNING', percent=percent)
             self.tick(count=2)
-            filled = sum(1 for p in self.status() if p[1] > p[2])
+            filled = sum(1 for p in self.status() if is_water(p))
             self.assertEqual(filled, expected, percent)
 
     def test_the_cap_is_not_counted_as_progress(self):

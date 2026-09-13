@@ -4,10 +4,10 @@ import unittest
 from light_studio.layout import DEFAULTS
 from light_studio.model import STATES
 from light_studio.renderer import (ACCENT_POSITIONS, ALARM_FLOOR, BRIGHT_CAP,
-                                   CELEBRATE_SECONDS, IDENTIFY_SECONDS, INK_BANDS, PIXELS,
+                                   CELEBRATE_SECONDS, IDENTIFY_SECONDS, PIXELS,
                                    QUANT, RIPPLE_DELAY, RIPPLE_SECONDS,
-                                   SPLASH_SECONDS, STATUS_POSITIONS,
-                                   droplet_timing, render_rope)
+                                   SHADE_BANDS, SPLASH_SECONDS, STATUS_POSITIONS,
+                                   droplet_timing, is_pink, is_water, render_rope)
 
 
 def brightness(frame):
@@ -65,12 +65,28 @@ class DistinctnessTests(unittest.TestCase):
             seen[frame] = state
 
     def test_error_and_pause_are_not_mistakable_for_idle(self):
-        idle = render_rope('idle', None, 3.0, 0)
+        # Idle is static; both alarms breathe, and error is the one saturated
+        # (almost no green) pink while pause is a light one.
+        idles = {tuple(tuple(p) for p in render_rope('idle', None, t, 0)) for t in (0.0, 1.0, 2.0, 3.0)}
+        self.assertEqual(len(idles), 1)
         for state in ('error', 'paused'):
-            frame = render_rope(state, None, 3.0, 0)
-            # Alarms are red-dominant; idle water is blue-dominant.
-            self.assertGreater(sum(p[0] for p in frame), sum(p[2] for p in frame), state)
-            self.assertLess(sum(p[0] for p in idle), sum(p[2] for p in idle))
+            frames = {tuple(tuple(p) for p in render_rope(state, None, t, 0)) for t in (0.0, 1.0, 2.0, 3.0)}
+            self.assertGreater(len(frames), 1, state)
+        error = render_rope('error', None, 3.0, 0, {'brightness': 100})[10]
+        paused = render_rope('paused', None, 3.0, 0, {'brightness': 100})[10]
+        self.assertLess(error[1], error[0] * 0.15)
+        self.assertGreater(paused[1], paused[0] * 0.5)
+
+    def test_every_lit_pixel_of_every_state_is_a_shade_of_pink(self):
+        """Adi, 2026-09-13: 'REPLACE EVERY COLOR WITH A SHADE OF PINK'."""
+        for state in STATES:
+            for t in (0.0, 0.3, 1.1, 2.6, 5.0, 9.7):
+                for since in (None, 1.0, 4.0, CELEBRATE_SECONDS + 1):
+                    frame = render_rope(state, 42, t, 1, {'brightness': 100},
+                                        since_complete=since)
+                    for pixel in frame:
+                        if sum(pixel):
+                            self.assertTrue(is_pink(pixel), (state, t, since, pixel))
 
     def test_offline_is_dim_and_never_shows_a_progress_edge(self):
         # Averaged over the heartbeat cycle: a single instant sits on a thump or
@@ -87,14 +103,15 @@ class DistinctnessTests(unittest.TestCase):
         self.assertEqual(len({tuple(p) for p in offline[:40]}
                              & {tuple(p) for p in offline[60:]}), 1)
 
-    def test_unknown_is_neutral_grey_not_the_purple_offline_heartbeat(self):
+    def test_unknown_is_a_washed_out_dashed_pink_not_the_offline_heartbeat(self):
         unknown = render_rope('unknown', None, 1.0, 0, {'brightness': 100})
         offline = render_rope('offline', None, 0.1, 0, {'brightness': 100})
-        self.assertGreater(sum(p[2] for p in offline), sum(p[0] for p in offline))
+        self.assertEqual(len({tuple(p) for p in offline[:40]}), 1, 'offline is uniform')
         lit = [p for p in unknown if sum(p) > 0]
         self.assertTrue(lit)
-        for pixel in lit:                      # grey: channels within one step
-            self.assertLessEqual(max(pixel) - min(pixel), QUANT * 3)
+        self.assertGreater(len({tuple(p) for p in unknown}), 1, 'unknown is dashed')
+        for pixel in lit:                      # washed out: low saturation
+            self.assertLess(max(pixel) - min(pixel), max(pixel) * 0.4)
 
 
 class ProgressTests(unittest.TestCase):
@@ -102,8 +119,8 @@ class ProgressTests(unittest.TestCase):
         def waterline(percent):
             frame = render_rope('printing', percent, 0.0, 0,
                                 {'reduced_motion': True, 'brightness': 100})
-            green = [i for i, p in enumerate(frame) if p[1] > p[2]]
-            return max(green) if green else -1
+            water = [i for i, p in enumerate(frame) if is_water(p)]
+            return max(water) if water else -1
         self.assertLess(waterline(10), waterline(50))
         self.assertLess(waterline(50), waterline(90))
 
@@ -133,20 +150,23 @@ class ProgressTests(unittest.TestCase):
             self.assertGreaterEqual(cycle, fall + SPLASH_SECONDS, travel)
             self.assertGreater(cycle, 0)
 
-    def test_a_droplet_falls_through_the_blue_and_reaches_the_waterline(self):
-        """The drop is green, lives only above the waterline, and lands."""
+    def test_a_droplet_falls_through_the_shades_and_reaches_the_waterline(self):
+        """The drop lives only above the waterline, and lands."""
         settings = {'brightness': 100}
         for percent in (0, 3, 12, 25, 50, 90):
             fill = round(percent / 100 * STATUS_POSITIONS)
             _, cycle = droplet_timing((STATUS_POSITIONS - 1) - fill)
+            still = render_rope('printing', percent, 0.0, 0,
+                                dict(settings, reduced_motion=True))
             seen = []
             steps = 600
             for step in range(steps):
                 frame = render_rope('printing', percent, step * cycle / steps, 0,
                                     settings)
-                # A green-dominant pixel inside the blue remainder is the drop.
+                # Any pixel above the waterline that differs from the still
+                # base is the drop.
                 drops = [i for i in range(fill, STATUS_POSITIONS)
-                         if frame[i][1] > frame[i][2]]
+                         if frame[i] != still[i]]
                 if drops:
                     seen.append(min(drops))
             if fill >= STATUS_POSITIONS - 3:
@@ -158,27 +178,28 @@ class ProgressTests(unittest.TestCase):
                                f'droplet never started high at {percent}%')
 
 
-class BlueGreenTests(unittest.TestCase):
-    """A running print: orange fill over a deep-blue remainder. Pure red is
-    reserved for the error state (Adi, 2026-09-12: a red default read as an
-    alarm; 2026-09-13: green-on-blue was too similar, so the fill is orange)."""
+class PinkThemeTests(unittest.TestCase):
+    """A running print: pastel-pink fill under a remainder of progressively
+    darker pinks (Adi, 2026-09-13: "a full pink theme"). Pure red is reserved
+    for the error state (2026-09-12: a red default read as an alarm)."""
 
     def bar(self, percent, t=0.0, **settings):
         return render_rope('printing', percent, t, 0,
                            dict({'brightness': 100, 'reduced_motion': True},
                                 **settings))
 
-    def test_zero_percent_is_entirely_ink(self):
+    def test_zero_percent_is_entirely_shaded_pink(self):
         frame = self.bar(0)
-        self.assertEqual(len(set(tuple(p) for p in frame)), INK_BANDS)
-        for blue in frame:
-            self.assertEqual(blue[0], 0)
-            self.assertGreater(blue[2], blue[1])
-        self.assertGreater(frame[0][2], 100)
+        self.assertEqual(len(set(tuple(p) for p in frame)), SHADE_BANDS)
+        for pink in frame:
+            self.assertGreater(pink[0], pink[2])      # red-led ...
+            self.assertGreater(pink[2], pink[1])      # ... with blue over green: pink, not orange
+            self.assertGreater(pink[1], 0)            # never pure red / magenta
+        self.assertGreater(frame[0][0], 200)
 
-    def test_the_remainder_is_ink_shades_getting_progressively_darker(self):
-        """Adi, 2026-09-13: 'different shades of ink ... progressively darker'.
-        Deep blue at the waterline, INK_BANDS distinct shades, each darker than
+    def test_the_remainder_is_pink_shades_getting_progressively_darker(self):
+        """Adi, 2026-09-13: 'different shades of pink ... progressively darker'.
+        Hot pink at the waterline, SHADE_BANDS distinct shades, each darker than
         the one before it, the darkest still clearly lit."""
         for percent in (0, 10, 33, 50, 75, 90):
             frame = self.bar(percent)
@@ -188,15 +209,15 @@ class BlueGreenTests(unittest.TestCase):
             for pixel in rest:
                 if not shades or shades[-1] != pixel:
                     shades.append(pixel)
-            self.assertEqual(len(shades), INK_BANDS, (percent, shades))
-            self.assertEqual(len(set(shades)), INK_BANDS, (percent, shades))
+            self.assertEqual(len(shades), SHADE_BANDS, (percent, shades))
+            self.assertEqual(len(set(shades)), SHADE_BANDS, (percent, shades))
             for lighter, darker in zip(shades, shades[1:]):
                 self.assertGreater(sum(lighter), sum(darker), (percent, shades))
-                self.assertGreater(lighter[2], darker[2], (percent, shades))
+                self.assertGreater(lighter[0], darker[0], (percent, shades))
             self.assertGreater(sum(shades[-1]), 40, shades[-1])
 
     def test_a_printing_rope_never_shows_a_pure_red_pixel(self):
-        """Red means error and nothing else on this wall. The orange fill is
+        """Red means error and nothing else on this wall. Every pink is
         red-led, so every red-led pixel must carry a clear green component."""
         for percent in (None, 0, 5, 27, 50, 99, 100):
             for t in (0.0, 0.7, 2.3, 5.5, 9.1):
@@ -206,40 +227,44 @@ class BlueGreenTests(unittest.TestCase):
                         self.assertGreaterEqual(pixel[1], pixel[0] * 0.35,
                                                 (percent, t, pixel))
 
-    def test_error_body_is_pure_deep_red(self):
-        """No orange tint: green and blue stay at zero across the breath."""
+    def test_error_body_is_deep_saturated_fuchsia(self):
+        """The alarm pink: strong red and blue, almost no green, across the breath."""
         for t in (0.0, 0.5, 1.0, 1.9, 3.3):
             frame = render_rope('error', 40, t, 0, {'brightness': 100})
             body = frame[3:-3]
             self.assertTrue(body)
             for pixel in body:
                 self.assertGreater(pixel[0], 100, (t, pixel))
-                self.assertEqual(pixel[1], 0, (t, pixel))
-                self.assertEqual(pixel[2], 0, (t, pixel))
+                self.assertLess(pixel[1], pixel[0] * 0.12, (t, pixel))
+                self.assertGreater(pixel[2], pixel[0] * 0.3, (t, pixel))
 
-    def test_one_hundred_percent_is_entirely_orange(self):
+    def test_one_hundred_percent_is_entirely_pastel_pink(self):
         frame = self.bar(100)
         self.assertEqual(len(set(tuple(p) for p in frame)), 1)
-        orange = frame[0]
-        self.assertGreater(orange[0], orange[1])
-        self.assertGreater(orange[1], 0)
-        self.assertEqual(orange[2], 0)
+        pastel = frame[0]
+        self.assertGreater(pastel[0], pastel[2])
+        self.assertGreater(pastel[2], pastel[1])
+        self.assertGreater(pastel[1], 120, 'the water is a light pink, not a hot one')
 
-    def test_the_bar_is_orange_below_the_waterline_and_blue_above(self):
+    def test_the_bar_is_pastel_below_the_waterline_and_hot_pink_above(self):
         for percent in (10, 25, 50, 75, 90):
             frame = self.bar(percent)
             fill = round(percent / 100 * STATUS_POSITIONS)
+            water = frame[0]
             for i in range(fill):
-                self.assertGreater(frame[i][1], frame[i][2], (percent, i))
+                self.assertEqual(frame[i], water, (percent, i))
             for i in range(fill, STATUS_POSITIONS):
-                self.assertGreater(frame[i][2], frame[i][1], (percent, i))
-                self.assertEqual(frame[i][0], 0, (percent, i))
+                r, g, b = frame[i]
+                self.assertGreater(r, b, (percent, i))
+                self.assertGreater(b, g, (percent, i))
+                # Every remainder shade is deeper than the pastel water.
+                self.assertLess(g, water[1] - 30, (percent, i))
 
-    def test_the_water_is_a_single_solid_colour_and_the_ink_is_banded(self):
+    def test_the_water_is_a_single_solid_colour_and_the_remainder_is_banded(self):
         frame = self.bar(50)
         fill = round(0.5 * STATUS_POSITIONS)
         self.assertEqual(len(set(tuple(p) for p in frame[:fill])), 1)
-        self.assertEqual(len(set(tuple(p) for p in frame[fill:])), INK_BANDS)
+        self.assertEqual(len(set(tuple(p) for p in frame[fill:])), SHADE_BANDS)
 
     def test_no_pixel_of_a_printing_rope_is_ever_dark(self):
         """The old blue remainder quantized to near-black and read as 'off'."""
@@ -250,17 +275,17 @@ class BlueGreenTests(unittest.TestCase):
                     self.assertGreater(sum(pixel), 40, (percent, t, pixel))
 
     def test_a_still_bar_is_one_run_per_zone_and_fits_a_single_tick(self):
-        """Water plus INK_BANDS ink bands: the whole base paints in one tick and
+        """Water plus SHADE_BANDS bands: the whole base paints in one tick and
         then holds still, so it costs nothing between percent changes."""
         from light_studio import transport as tp
         frame = self.bar(40)
         runs = 1 + sum(1 for a, b in zip(frame, frame[1:]) if a != b)
-        self.assertEqual(runs, 1 + INK_BANDS)
+        self.assertEqual(runs, 1 + SHADE_BANDS)
         self.assertLessEqual(runs, tp.MAX_MSGS_PER_NODE_TICK)
 
 
 class MotionTests(unittest.TestCase):
-    def test_idle_is_a_still_uniform_cyan(self):
+    def test_idle_is_a_still_uniform_rose(self):
         # The resting state is deliberately static: no motion, no transport cost.
         frames = {tuple(tuple(p) for p in render_rope('idle', None, t, 0))
                   for t in (0.0, 0.7, 1.4, 2.1, 2.8)}
@@ -268,9 +293,9 @@ class MotionTests(unittest.TestCase):
         frame = render_rope('idle', None, 1.0, 0)
         self.assertEqual(len({tuple(p) for p in frame}), 1)
         r, g, b = frame[0]
-        self.assertEqual(r, 0)
-        self.assertGreater(b, 100)
-        self.assertGreater(g, 100)
+        self.assertGreater(r, b)
+        self.assertGreater(b, g)
+        self.assertGreater(r, 100)
 
     def test_idle_ignores_speed_and_position(self):
         slow = render_rope('idle', None, 4.0, 0, {'speed': 0.25})
@@ -315,7 +340,7 @@ class RippleTests(unittest.TestCase):
 
     def test_a_ripple_does_not_erase_printing_progress(self):
         def edge(frame):
-            return [i for i, p in enumerate(frame) if p[1] > p[2] + QUANT]
+            return [i for i, p in enumerate(frame) if is_water(p)]
         plain = render_rope('printing', 40, 0.3, 0, {'reduced_motion': False}, [])
         rippled = render_rope('printing', 40, 0.3, 0, {}, event(0.0, 0))
         self.assertNotEqual(plain, rippled)
@@ -334,7 +359,7 @@ class CelebrationTests(unittest.TestCase):
         steady = render_rope('finished', 100, 1.0, 0, {}, since_complete=None)
         self.assertNotEqual(fresh, steady)
 
-    def test_celebration_is_a_uniform_rainbow_that_turns_and_ends_in_collect_green(self):
+    def test_celebration_is_a_uniform_pink_wash_that_turns_and_ends_in_collect_pink(self):
         seen = set()
         one_cycle = CELEBRATE_SECONDS / 2          # RAINBOW_CYCLES turns in total
         for k in range(6):
@@ -347,22 +372,27 @@ class CelebrationTests(unittest.TestCase):
         rest = render_rope('finished', 100, 1.0, 0, {}, since_complete=None)
         for a, b in zip(nearly, rest):
             for x, y in zip(a, b):
-                self.assertLessEqual(abs(x - y), QUANT, 'cross-fade hands off to green with no visible step')
+                self.assertLessEqual(abs(x - y), QUANT, 'cross-fade hands off to the collect pink with no visible step')
         self.assertNotEqual(rest, render_rope('idle', None, 1.0, 0, {}),
                             'ready-to-collect must be distinguishable from idle')
         self.assertEqual(len({tuple(p) for p in rest}), 1)
-        self.assertGreater(rest[0][1], rest[0][0])
-        self.assertGreater(rest[0][1], rest[0][2])
+        # The lightest pink on the wall: near white, blue over green.
+        self.assertGreater(rest[0][0], rest[0][2])
+        self.assertGreater(rest[0][2], rest[0][1])
+        self.assertGreater(rest[0][1], rest[0][0] * 0.75)
 
-    def test_stopped_is_a_steady_magenta_unlike_error_pause_or_collect(self):
+    def test_stopped_is_a_steady_deep_plum_unlike_idle_and_collect(self):
         frame = render_rope('stopped', None, 3.0, 0, {'brightness': 100})
         self.assertEqual(frame, render_rope('stopped', None, 7.5, 0, {'brightness': 100}),
                          'stopped is static: it must cost nothing to hold')
+        idle = render_rope('idle', None, 3.0, 0, {'brightness': 100})[10]
+        rest = render_rope('finished', 100, 3.0, 0, {'brightness': 100}, since_complete=None)[10]
         body = frame[3:-3]
         for pixel in body:
-            self.assertGreater(pixel[0], 150)
-            self.assertEqual(pixel[1], 0)
-            self.assertGreater(pixel[2], 60, 'not pure red: red is the error colour')
+            self.assertLess(sum(pixel), sum(idle), 'darker than idle')
+            self.assertLess(sum(pixel), sum(rest), 'darker than collect')
+            self.assertGreater(pixel[0], pixel[2])
+            self.assertGreater(pixel[2], pixel[1])
 
     def test_the_celebration_is_bounded_and_settles_back_to_steady_green(self):
         steady = render_rope('finished', 100, 5.0, 0, {}, since_complete=None)
@@ -370,12 +400,13 @@ class CelebrationTests(unittest.TestCase):
                             since_complete=CELEBRATE_SECONDS + 0.1)
         self.assertEqual(steady, after)
 
-    def test_the_collect_signal_rests_in_cyan_with_no_red(self):
+    def test_the_collect_signal_rests_in_the_lightest_pink(self):
         for since in (CELEBRATE_SECONDS - 0.01, CELEBRATE_SECONDS + 5, None):
             frame = render_rope('finished', 100, 2.0, 0, {'brightness': 100},
                                 since_complete=since)
-            self.assertEqual(sum(p[0] for p in frame), 0, since)
-            self.assertGreater(sum(p[1] + p[2] for p in frame), 0, since)
+            for pixel in frame[:STATUS_POSITIONS]:
+                self.assertTrue(is_pink(pixel), (since, pixel))
+                self.assertGreater(min(pixel), 150, (since, pixel))
 
 
 class IdentifyTests(unittest.TestCase):

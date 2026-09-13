@@ -157,7 +157,7 @@ h2 span { color: var(--aqua); padding-left: 12px; }
   padding: 2px 6px;
   border-radius: 3px;
 }
-.bay.identifying { border-color: #6fe6ff; box-shadow: 0 0 0 2px #6fe6ff44, 0 0 26px #6fe6ff33; }
+.bay.identifying { border-color: #ff78be; box-shadow: 0 0 0 2px #ff78be44, 0 0 26px #ff78be33; }
 .bay.walking { border-color: var(--amber); box-shadow: 0 0 0 1px var(--amber); }
 .bay.dragover { border-color: var(--aqua); background: #23403e; }
 
@@ -216,7 +216,7 @@ h2 span { color: var(--aqua); padding-left: 12px; }
 .state { font: 10px var(--mono); letter-spacing: .8px; text-transform: uppercase; color: var(--aqua); text-align: center; height: 18px; margin: 8px 0 2px; }
 .state.error, .state.paused { color: var(--coral); }
 .state.offline, .state.unknown { color: var(--dim); }
-.state.finished { color: #8fe6a3; }
+.state.finished { color: #ffd7e8; }
 .state.stopped { color: #ff5fb0; }
 
 .status-meta { font: 9px/1.7 var(--mono); color: var(--muted); min-height: 62px; text-align: center; margin: 6px 0 12px; overflow: hidden; }
