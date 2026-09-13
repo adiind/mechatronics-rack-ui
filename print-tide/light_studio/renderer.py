@@ -205,8 +205,10 @@ IDENT_CORE = (255, 235, 245)
 RIPPLE_COMPLETE = (255, 245, 250)
 RIPPLE_OTHER = (200, 60, 140)
 #: The "rainbow" accent and the completion wash stay inside the pink hues:
-#: from magenta-pink round to rose, swept back and forth so there is no jump.
-PINK_HUE_LOW = 0.80
+#: from magenta (hue 5/6, where red and blue are level) round to rose, swept
+#: back and forth so there is no jump. Below 5/6 the sweep would turn violet
+#: with blue over red, which is not a pink.
+PINK_HUE_LOW = 0.84
 PINK_HUE_HIGH = 0.97
 
 

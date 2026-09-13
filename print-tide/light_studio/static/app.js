@@ -29,7 +29,7 @@ const SIM_STATES = Object.keys(STATE_TEXT);
 const ACCENT_MODES = {
   white: 'Pure white',
   color: 'Solid colour',
-  rainbow: 'Rainbow',
+  rainbow: 'Pink sweep',
 };
 
 /* Colour helpers. No regular expressions anywhere in this file. */

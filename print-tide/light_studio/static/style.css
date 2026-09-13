@@ -331,15 +331,15 @@ h2 span { color: var(--aqua); padding-left: 12px; }
   color: var(--muted);
 }
 .legend span { display: flex; align-items: center; gap: 7px; }
-.legend i { width: 7px; height: 7px; border-radius: 50%; background: #3f7fb5; }
-.legend i.preparing { background: #37d6f2; }
-.legend i.printing { background: #ff7a1a; }
-.legend i.paused { background: var(--amber); }
-.legend i.error { background: #ed7559; }
-.legend i.finished { background: #89e093; }
-.legend i.stopped { background: #ff5fb0; }
-.legend i.offline { background: #797792; }
-.legend i.unknown { background: #626870; }
+.legend i { width: 7px; height: 7px; border-radius: 50%; background: #d75a96; }
+.legend i.preparing { background: #ffc8e4; }
+.legend i.printing { background: #ff6eb4; }
+.legend i.paused { background: #ffafd7; }
+.legend i.error { background: #ff0f6e; }
+.legend i.finished { background: #ffd7e8; }
+.legend i.stopped { background: #a52d69; }
+.legend i.offline { background: #965582; }
+.legend i.unknown { background: #aa8296; }
 .legend i.cap { background: #ffffff; }
 .zone-note { max-width: 88ch; color: var(--dim); margin: 0 0 10px; }
 

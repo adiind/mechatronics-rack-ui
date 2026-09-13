@@ -7,7 +7,8 @@ from light_studio.renderer import (ACCENT_POSITIONS, ALARM_FLOOR, BRIGHT_CAP,
                                    CELEBRATE_SECONDS, IDENTIFY_SECONDS, PIXELS,
                                    QUANT, RIPPLE_DELAY, RIPPLE_SECONDS,
                                    SHADE_BANDS, SPLASH_SECONDS, STATUS_POSITIONS,
-                                   droplet_timing, is_pink, is_water, render_rope)
+                                   droplet_timing, is_pink, is_water, render_accent,
+                                   render_rope)
 
 
 def brightness(frame):
@@ -87,6 +88,12 @@ class DistinctnessTests(unittest.TestCase):
                     for pixel in frame:
                         if sum(pixel):
                             self.assertTrue(is_pink(pixel), (state, t, since, pixel))
+        # The accent cap's "rainbow" is a pink sweep, on every bay, at any time.
+        for position in range(7):
+            for t in (0.0, 3.0, 11.0, 29.0, 47.0, 88.0, 133.0):
+                for pixel in render_accent({'mode': 'rainbow'}, t, position):
+                    if sum(pixel):
+                        self.assertTrue(is_pink(pixel), ('accent', position, t, pixel))
 
     def test_offline_is_dim_and_never_shows_a_progress_edge(self):
         # Averaged over the heartbeat cycle: a single instant sits on a thump or
