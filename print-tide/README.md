@@ -82,6 +82,25 @@ can only show you the *intent*, never how smooth the physical rope will look.
 
 ---
 
+### Reference pages
+
+Two read-only pages sit beside the studio, linked from its header:
+
+* **`/states` — States & animations.** Every state a rope can be in, with a
+  live preview from the real renderer, the Bambu report that triggers it, what
+  the animation does and what ends it; a table of how a `gcode_state` becomes a
+  wall state; the speed-profile table (Silent / Standard / Sport / Ludicrous →
+  rain tempo, comet tail, splash); the selected theme's palette; and a "live
+  wall" strip showing all seven ropes right now with state and speed. A theme
+  selector previews any theme without touching the wall.
+* **`/logs` — Telemetry logs.** What the seven printers actually send, one
+  column per printer, paced for people: one entry per *change* in the MQTT
+  `report` payload (old → new, with a plain-English gloss for the fields the
+  wall uses and "not used yet" for the rest), noisy fields folded into a quiet
+  ticking line, each entry expandable to the raw JSON, and a line saying what
+  the wall made of it. Hosts, serials and access codes are stripped before
+  anything leaves the host process.
+
 ## Two zones per rope
 
 Each rope is 100 *addressable positions* (WS2811 modules — not 100 individual

@@ -464,3 +464,9 @@ footer { display: flex; justify-content: space-between; padding: 24px 4vw; borde
 .theme-card .theme-name { font-size: 12px; letter-spacing: .04em; text-transform: uppercase; }
 .theme-card .theme-strip { display: flex; height: 10px; border-radius: 5px; overflow: hidden; }
 .theme-card .theme-strip i { flex: 1; display: block; }
+
+/* ---- links to the reference pages ---- */
+nav[role="tablist"] .page-link { align-self: center; margin-left: 14px; font-size: 12px;
+  letter-spacing: .04em; text-transform: uppercase; color: var(--muted); text-decoration: none;
+  border-bottom: 1px solid transparent; }
+nav[role="tablist"] .page-link:hover { color: var(--aqua); border-bottom-color: var(--aqua); }

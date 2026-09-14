@@ -111,9 +111,12 @@ class JavaScriptTests(unittest.TestCase):
 
 class HTMLTests(unittest.TestCase):
     def test_it_references_only_assets_the_server_serves(self):
+        # Files the server hands out, plus the routes it serves pages from
+        # (the header links to the /states and /logs reference pages).
         served = {name for name, _ in FILES.values()} | {'style.css', 'app.js'}
+        routes = {path.lstrip('/') for path in FILES}
         for href in re.findall(r'(?:href|src)="/([^"]*)"', HTML):
-            self.assertIn(href or 'index.html', served | {'index.html', ''}, href)
+            self.assertIn(href or 'index.html', served | routes | {'index.html', ''}, href)
 
     def test_no_inline_script_or_style_that_the_csp_would_block(self):
         self.assertNotIn('<style', HTML)

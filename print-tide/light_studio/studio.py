@@ -29,6 +29,33 @@ from .model import STALE_AFTER, STATES, normalize, number
 
 #: States whose bed still holds a part: collection (button or door) applies.
 COLLECTABLE = ('finished', 'stopped')
+
+#: Keys stripped from raw printer reports before they reach the browser. This
+#: mirrors ``redact_report`` in the host (reference/server.py) as defence in
+#: depth: the studio never trusts that the host already did it. A key is
+#: dropped if any underscore-separated token is in the set or if it contains
+#: one of the fragments.
+_REDACT_TOKENS = frozenset({'sn', 'serial', 'access', 'code', 'passwd', 'password',
+                            'passw', 'ssid', 'ip', 'mac', 'url', 'rtsp', 'ipcam',
+                            'token', 'key', 'secret', 'uid', 'uuid', 'host', 'addr'})
+_REDACT_FRAGMENTS = ('access', 'passw', 'rtsp', 'ipcam', 'serial', 'secret', 'token')
+
+
+def redact_report(value):
+    """Recursively drop sensitive-looking keys from a Bambu report payload."""
+    if isinstance(value, dict):
+        out = {}
+        for key, item in value.items():
+            name = str(key)
+            low = name.lower()
+            if any(fragment in low for fragment in _REDACT_FRAGMENTS) or \
+               any(token in _REDACT_TOKENS for token in low.split('_')):
+                continue
+            out[name] = redact_report(item)
+        return out
+    if isinstance(value, list):
+        return [redact_report(item) for item in value]
+    return value
 from .renderer import (ACCENT_POSITIONS, CELEBRATE_SECONDS, IDENTIFY_SECONDS,
                        PIXELS, STATUS_POSITIONS, compose_rope, render_accent,
                        render_rope)
@@ -99,8 +126,11 @@ class Studio:
     """
 
     def __init__(self, root, initial, snapshots, publish, enabled,
-                 *, clock=time.time, demo=False, pixels=PIXELS):
+                 *, clock=time.time, demo=False, pixels=PIXELS, raw_reports=None):
         self.lock = threading.RLock()
+        # Optional: the host's recent raw (already redacted) MQTT reports per
+        # printer, for the telemetry log page. Read-only; never influences lights.
+        self.raw_reports = raw_reports if callable(raw_reports) else (lambda: {})
         self.initial = _check_initial(initial)
         self.pixels = pixels
         # Zone split is fixed for this wall: 90 status positions from the wire,
@@ -851,6 +881,90 @@ class Studio:
                          'reverse': flips[index], 'accent': caps[index]}
                         for index, slot in enumerate(slots)]
         return film
+
+    # ------------------------------------------------------------ telemetry log
+
+    def logs(self, printer=None, since=None, limit=200, raw=False):
+        """What the printers actually said, as a change log per printer.
+
+        Consecutive raw reports are diffed server-side so the page only has to
+        show ``changed`` (field -> [old, new]); identical consecutive reports are
+        folded into the previous entry's ``repeats``. ``since`` (epoch seconds)
+        returns only newer entries for incremental polling. Bambu sends a full
+        ~100-key report about once a second per printer, so the full payload is
+        only included when ``raw`` is true (the page asks for one entry at a
+        time when a row is expanded); otherwise each entry carries ``keys``, the
+        number of fields in that report. Every report is passed through
+        :func:`redact_report` again here, so even a host that forgot to redact
+        cannot leak a serial, address or URL to the browser. Read-only: nothing
+        here touches the lights.
+        """
+        try:
+            limit = max(1, min(400, int(limit)))
+        except (TypeError, ValueError):
+            raise ValueError('Log limit must be a number')
+        if since is not None:
+            since = number(since)
+            if since is None:
+                raise ValueError('Log cursor must be a number')
+        reports = self.raw_reports() or {}
+        if not isinstance(reports, dict):
+            reports = {}
+        with self.lock:
+            slots = self.store.current['slots']
+            status = copy.deepcopy(self.status)
+            now = self.clock()
+        labels = {slot['printer']: slot['label'] for slot in slots}
+        positions = {slot['printer']: index for index, slot in enumerate(slots)}
+        names = [slot['printer'] for slot in slots]
+        names += sorted(name for name in reports if name not in positions)
+        out = []
+        for name in names:
+            if printer is not None and name != printer:
+                continue
+            series = reports.get(name) or []
+            entries = []
+            prev = None
+            for item in series:
+                try:
+                    at, report = item
+                    at = float(at)
+                except (TypeError, ValueError):
+                    continue
+                if not isinstance(report, dict):
+                    continue
+                report = redact_report(report)
+                if prev is None:
+                    changed = {key: [None, value] for key, value in sorted(report.items())}
+                else:
+                    changed = {}
+                    for key in sorted(set(prev) | set(report)):
+                        if prev.get(key) != report.get(key):
+                            changed[key] = [prev.get(key), report.get(key)]
+                first = prev is None
+                prev = report
+                if not changed:
+                    if entries:
+                        entries[-1]['repeats'] += 1
+                        entries[-1]['last_at'] = round(at, 3)
+                    continue
+                entry = {'at': round(at, 3), 'last_at': round(at, 3),
+                         'first': first, 'changed': changed, 'keys': len(report),
+                         'repeats': 0}
+                if raw:
+                    entry['raw'] = report
+                entries.append(entry)
+            if since is not None:
+                entries = [entry for entry in entries if entry['at'] > since]
+            out.append({
+                'printer': name,
+                'label': labels.get(name, name),
+                'position': positions.get(name),
+                'status': status.get(name),
+                'reports_kept': len(series),
+                'entries': entries[-limit:],
+            })
+        return {'at': now, 'printers': out}
 
     def preview(self, state, percent, t, settings=None):
         """Legacy single-state preview: one frame per bay. Read-only."""

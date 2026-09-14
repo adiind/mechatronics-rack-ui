@@ -28,6 +28,7 @@ Cast mapping (which printer paints which ledwall node):
 The WLED strip mirrors WLED_PRINTER (default: the first printer).
 """
 import hmac, ipaddress, json, os, ssl, subprocess, threading, time
+from collections import deque
 import requests
 import uvicorn
 import paho.mqtt.client as mqtt
@@ -95,6 +96,34 @@ _led_count = {"n": None}   # cached WLED LED count
 
 
 # ---- printers ---------------------------------------------------------------
+#: Raw report capture for the telemetry log page: how many reports to keep per
+#: printer, and which keys are stripped before a report leaves the Printer.
+#: Generous on purpose: a key is dropped if any underscore-separated token is
+#: in the set, or if it contains one of the fragments. Access codes never enter
+#: a report, but serial numbers, addresses and camera URLs do.
+REPORT_LOG = 400
+_REDACT_TOKENS = {"sn", "serial", "access", "code", "passwd", "password", "passw",
+                  "ssid", "ip", "mac", "url", "rtsp", "ipcam", "token", "key",
+                  "secret", "uid", "uuid", "host", "addr"}
+_REDACT_FRAGMENTS = ("access", "passw", "rtsp", "ipcam", "serial", "secret", "token")
+
+def redact_report(value):
+    """Recursively drop sensitive-looking keys from a Bambu report payload."""
+    if isinstance(value, dict):
+        out = {}
+        for k, v in value.items():
+            key = str(k)
+            low = key.lower()
+            if any(f in low for f in _REDACT_FRAGMENTS) or \
+               any(tok in _REDACT_TOKENS for tok in low.split("_")):
+                continue
+            out[key] = redact_report(v)
+        return out
+    if isinstance(value, list):
+        return [redact_report(v) for v in value]
+    return value
+
+
 class Printer:
     """One Bambu printer: config + live status + its own MQTT reconnect loop."""
 
@@ -109,6 +138,15 @@ class Printer:
             "updated": None, "mqtt_connected": False,
         }
         self.cast_last = None               # last (lit, color) painted on its node
+        self.reports = deque(maxlen=REPORT_LOG)   # (time, redacted raw "print" dict)
+
+    def raw_reports(self, since=None, limit=REPORT_LOG):
+        """Recent redacted report payloads as ``[(epoch_seconds, dict), ...]``."""
+        with self.lock:
+            items = list(self.reports)
+        if since is not None:
+            items = [item for item in items if item[0] > since]
+        return items[-int(limit):] if limit else items
 
     def snapshot(self):
         with self.lock:
@@ -147,6 +185,7 @@ class Printer:
             return
         st = self.status
         with self.lock:
+            self.reports.append((time.time(), redact_report(p)))
             if p.get("mc_percent") is not None:        st["percent"] = p["mc_percent"]
             if p.get("gcode_state") is not None:        st["state"] = p["gcode_state"]
             if p.get("subtask_name"):                   st["job"] = p["subtask_name"]

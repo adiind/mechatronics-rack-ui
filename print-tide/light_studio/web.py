@@ -13,6 +13,7 @@ from __future__ import annotations
 import hmac
 import ipaddress
 import json
+import re
 import secrets
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -26,6 +27,13 @@ FILES = {
     '/': ('index.html', 'text/html; charset=utf-8'),
     '/app.js': ('app.js', 'text/javascript; charset=utf-8'),
     '/style.css': ('style.css', 'text/css; charset=utf-8'),
+    # Reference pages: what every state looks like, and what the printers say.
+    '/states': ('states.html', 'text/html; charset=utf-8'),
+    '/states.js': ('states.js', 'text/javascript; charset=utf-8'),
+    '/states.css': ('states.css', 'text/css; charset=utf-8'),
+    '/logs': ('logs.html', 'text/html; charset=utf-8'),
+    '/logs.js': ('logs.js', 'text/javascript; charset=utf-8'),
+    '/logs.css': ('logs.css', 'text/css; charset=utf-8'),
 }
 
 MAX_BODY = 32768
@@ -119,6 +127,23 @@ def make_server(studio, host, port):
             path, query = parts.path, parse_qs(parts.query)
             if path == '/api/state':
                 return self.reply(200, dict(studio.view(), csrf=csrf))
+            if path == '/api/logs':
+                # Read-only telemetry change log; nothing here can reach a light.
+                try:
+                    printer = query.get('printer', [None])[0]
+                    since = query.get('since', [None])[0]
+                    since = float(since) if since not in (None, '') else None
+                    limit = int(query.get('limit', ['200'])[0])
+                    raw = query.get('raw', ['0'])[0] in ('1', 'true')
+                    if printer is not None and not re.fullmatch(r'[A-Za-z0-9_-]{1,40}', printer):
+                        raise ValueError('printer')
+                except (ValueError, TypeError):
+                    return self.reply(400, {'error': 'Invalid logs request'})
+                try:
+                    return self.reply(200, studio.logs(printer=printer, since=since,
+                                                       limit=limit, raw=raw))
+                except (ValueError, TypeError):
+                    return self.reply(400, {'error': 'Invalid logs request'})
             if path == '/api/film':
                 try:
                     frames = int(query.get('frames', ['10'])[0])

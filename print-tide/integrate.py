@@ -17,7 +17,8 @@ replacement='''    # Print Tide owns all seven printer ropes; keep exactly one r
             return c.publish(f"ledwall/{node}/set", json.dumps(payload, separators=(",", ":"))).rc == 0
         candidate = Studio("/home/edi/printer-light-studio/data", CAST_MAP,
                            lambda: [p.snapshot() for p in PRINTERS], studio_publish,
-                           lambda: CAST["enabled"])
+                           lambda: CAST["enabled"],
+                           raw_reports=lambda: {p.name: p.raw_reports() for p in PRINTERS})
         studio_http = serve(candidate, resolve_bind_host("auto"), 8772)
         LIGHT_STUDIO = candidate
         # Rope health: feed controller acks and retained online/offline status
