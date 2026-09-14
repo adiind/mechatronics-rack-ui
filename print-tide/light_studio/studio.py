@@ -32,6 +32,7 @@ COLLECTABLE = ('finished', 'stopped')
 from .renderer import (ACCENT_POSITIONS, CELEBRATE_SECONDS, IDENTIFY_SECONDS,
                        PIXELS, STATUS_POSITIONS, compose_rope, render_accent,
                        render_rope)
+from .themes import describe as describe_themes
 
 #: Rope controllers this studio may ever address. node01 is the unrelated
 #: rack/wall pilot and is excluded by pattern, not by convention.
@@ -541,12 +542,14 @@ class Studio:
                 pixels=self.status_positions,
                 since_complete=None if started is None else t - started,
                 identify_age=identify_age,
+                speed=row.get('speed'),
             )
 
         cap = render_accent(slot.get('accent'), t, position,
                             positions=self.accent_positions,
                             quiet=bool(settings.get('quiet')),
-                            still=bool(settings.get('reduced_motion')))
+                            still=bool(settings.get('reduced_motion')),
+                            theme=settings.get('theme'))
         return compose_rope(body, cap, slot['reverse'])
 
     def _render_all(self):
@@ -704,6 +707,7 @@ class Studio:
                 'accent_positions': self.accent_positions,
                 'accent_start': self.status_positions,
                 'nodes': list(self.nodes),
+                'themes': describe_themes(),
                 'ropes': ropes,
                 'events': [{'kind': e['kind'], 'printer': e['printer'],
                             'position': e['position'], 'age': round(self.phase - e['at'], 2)}
@@ -837,7 +841,8 @@ class Studio:
                 # accent the wall would not produce.
                 cap = render_accent(caps[position], t, position,
                                     positions=self.accent_positions,
-                                    quiet=opts['quiet'], still=opts['reduced_motion'])
+                                    quiet=opts['quiet'], still=opts['reduced_motion'],
+                                    theme=opts.get('theme'))
                 return compose_rope(body, cap, flips[position])
             specs.append(spec)
         film = self._film(specs, frames, fps, start)

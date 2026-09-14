@@ -66,15 +66,15 @@
          aria-label="Printer bays in physical left-to-right order"></div>
 
     <div class="legend">
-      <span><i class="idle"></i>Available &middot; resting rose</span>
-      <span><i class="preparing"></i>Preparing &middot; light-pink sweep</span>
-      <span><i class="printing"></i>Printing &middot; hot pink rising through darker pinks</span>
-      <span><i class="paused"></i>Paused &middot; light pink breath</span>
-      <span><i class="error"></i>Error &middot; deep fuchsia breath</span>
-      <span><i class="finished"></i>Collect &middot; lightest pink until the door opens</span>
-      <span><i class="stopped"></i>Stopped early &middot; deep plum until the door opens</span>
-      <span><i class="offline"></i>Offline &middot; mauve heartbeat</span>
-      <span><i class="unknown"></i>Unknown &middot; pale pink dashes</span>
+      <span><i class="idle"></i>Available &middot; resting, no motion</span>
+      <span><i class="preparing"></i>Preparing &middot; rising sweep</span>
+      <span><i class="printing"></i>Printing &middot; water rising through darker bands, rain</span>
+      <span><i class="paused"></i>Paused &middot; slow breath, steady end marks</span>
+      <span><i class="error"></i>Error &middot; deep fast breath</span>
+      <span><i class="finished"></i>Collect &middot; lightest, until the door opens</span>
+      <span><i class="stopped"></i>Stopped early &middot; dark and still, until the door opens</span>
+      <span><i class="offline"></i>Offline &middot; heartbeat</span>
+      <span><i class="unknown"></i>Unknown &middot; dashes</span>
       <span><i class="cap"></i>Far-end cap &middot; always on, never state</span>
     </div>
     <p class="micro zone-note">Progress is measured across the 90-position status
@@ -128,7 +128,7 @@
           <select id="cap-mode">
             <option value="white">Pure white</option>
             <option value="color">Solid colour</option>
-            <option value="rainbow">Pink sweep</option>
+            <option value="rainbow">Hue sweep (theme)</option>
           </select></label>
         <label class="range" for="cap-color">Colour
           <input id="cap-color" type="color" value="#ffffff"></label>
@@ -136,6 +136,10 @@
           <output id="cap-brightness-out">100%</output>
           <input id="cap-brightness" type="range" min="0" max="100" step="1" value="100"></label>
         <button id="cap-apply" class="wide secondary">Apply to all ropes</button>
+
+        <div class="eyebrow cap-gap">COLOUR THEME &middot; PART OF YOUR DRAFT</div>
+        <div id="theme-picker" class="theme-picker" role="radiogroup" aria-label="Colour theme"></div>
+        <p class="micro" id="theme-blurb"></p>
 
         <div class="eyebrow cap-gap">WALL SETTINGS &middot; PART OF YOUR DRAFT</div>
         <label class="range" for="brightness">Brightness <output id="brightness-out">65%</output>
@@ -188,9 +192,10 @@
     <div>
       <span>NOW / NOTICE</span>
       <h3>Quiet until it matters</h3>
-      <p>Every colour is a shade of pink. A resting rose when free, a hot-pink waterline rising
-         through darker pinks while printing, a light pink breath when paused, deep fuchsia on
-         error, and a smooth pink wash when a print really finishes.</p>
+      <p>Pick a colour theme for the whole wall. Whatever the palette, the shapes stay the
+         same: a still resting colour when free, a waterline rising through darker bands while
+         printing with rain that streaks at Sport and Ludicrous speeds, a slow breath when
+         paused, a deep fast breath on error, and a smooth wash when a print really finishes.</p>
     </div>
     <div>
       <span>NEXT / GROW</span>

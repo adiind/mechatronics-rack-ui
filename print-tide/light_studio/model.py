@@ -60,6 +60,9 @@ RAW_STATES = {
 
 _CONTROL = re.compile(r'[\x00-\x1f\x7f]')
 
+# Bambu speed profile (``spd_lvl``) -> display name. Anything else is unknown.
+SPEED_LEVELS = {1: 'silent', 2: 'standard', 3: 'sport', 4: 'ludicrous'}
+
 
 def number(value):
     """Return ``value`` as a finite float, or ``None``.
@@ -173,5 +176,9 @@ def normalize(row, now):
         'age': round(max(0.0, age), 1) if age is not None else None,
         # Door sensor (X1/H2D report it in home_flag); None when unknown.
         'door_open': row.get('door_open') if type(row.get('door_open')) is bool else None,
+        # Speed profile: 'silent' | 'standard' | 'sport' | 'ludicrous' | None,
+        # plus the feed-rate percentage the printer reports for it.
+        'speed': SPEED_LEVELS.get(_integer(row.get('speed_level'), 1, 4)) if fresh else None,
+        'speed_percent': _integer(row.get('speed_percent'), 1, 400) if fresh else None,
         'collected': False,
     }

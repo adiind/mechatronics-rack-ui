@@ -22,6 +22,7 @@ import os
 from pathlib import Path
 
 from .model import number
+from .themes import DEFAULT_THEME, names as theme_names
 
 #: 1 = original, 2 = added waterline_marks, 3 = added the per-rope accent cap.
 SCHEMA = 3
@@ -37,6 +38,7 @@ DEFAULTS = {
     'reduced_motion': False,
     'quiet': False,
     'waterline_marks': True,
+    'theme': DEFAULT_THEME,
 }
 
 SETTING_RANGES = {'brightness': (0, 100), 'speed': (0.25, 2.0)}
@@ -155,6 +157,10 @@ def validate_settings(settings):
             if type(settings[key]) is not bool:
                 raise ValueError('Animation toggles must be true or false')
             clean[key] = settings[key]
+    if 'theme' in settings:
+        if settings['theme'] not in theme_names():
+            raise ValueError('Unknown colour theme')
+        clean['theme'] = settings['theme']
     return clean
 
 

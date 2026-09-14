@@ -188,6 +188,196 @@ class ProgressTests(unittest.TestCase):
                                f'droplet never started high at {percent}%')
 
 
+class ThemeTests(unittest.TestCase):
+    """Adi, 2026-09-13: 'make it a theme thing'. Every theme fills the whole
+    palette, every state renders in every theme, and the theme setting reaches
+    the renderer through the wall settings."""
+
+    def test_every_theme_is_complete(self):
+        from light_studio.themes import PALETTE_KEYS, THEMES, names, palette, describe
+        self.assertEqual(set(names()), set(THEMES))
+        for name in names():
+            self.assertEqual(set(palette(name)), set(PALETTE_KEYS), name)
+            for key in PALETTE_KEYS:
+                value = palette(name)[key]
+                if key.startswith('hue_'):
+                    self.assertTrue(0.0 <= value <= 1.0, (name, key))
+                else:
+                    self.assertEqual(len(value), 3, (name, key))
+                    self.assertTrue(all(0 <= c <= 255 for c in value), (name, key))
+                    self.assertGreater(sum(value), 40, (name, key, 'reads as off'))
+        self.assertEqual([t['name'] for t in describe()], names())
+        self.assertEqual(palette('nonsense'), palette('pink'))
+
+    def test_every_state_renders_and_states_stay_distinct_in_every_theme(self):
+        from light_studio.themes import names
+        for theme in names():
+            seen = {}
+            for state in STATES:
+                since = 1.0 if state == 'finished' else None
+                frame = render_rope(state, 50, 3.0, 0, {'brightness': 100, 'theme': theme},
+                                    since_complete=since)
+                self.assertTrue(any(sum(p) for p in frame), (theme, state))
+                key = tuple(tuple(p) for p in frame)
+                self.assertNotIn(key, seen, (theme, state, seen.get(key)))
+                seen[key] = state
+
+    def test_theme_setting_recolours_the_wall_and_the_hue_sweep(self):
+        pink = render_rope('printing', 50, 0.0, 0, {'reduced_motion': True, 'brightness': 100})
+        classic = render_rope('printing', 50, 0.0, 0,
+                              {'reduced_motion': True, 'brightness': 100, 'theme': 'classic'})
+        self.assertNotEqual(pink, classic)
+        water = classic[0]
+        self.assertGreater(water[0], water[1])          # classic water is orange ...
+        self.assertEqual(water[2], 0)
+        top = classic[STATUS_POSITIONS - 1]
+        self.assertGreater(top[2], top[0])              # ... over deep blue
+        error = render_rope('error', None, 1.0, 0, {'brightness': 100, 'theme': 'classic'})[10]
+        self.assertEqual((error[1], error[2]), (0, 0))  # classic error is pure red
+        # The explicit argument wins over the setting.
+        self.assertEqual(render_rope('idle', None, 0.0, 0, {'theme': 'ocean'}, theme='classic'),
+                         render_rope('idle', None, 0.0, 0, {'theme': 'classic'}))
+        # The accent's hue sweep follows the theme: classic is a true rainbow.
+        seen = {tuple(render_accent({'mode': 'rainbow'}, t, 0, theme='classic')[0])
+                for t in [k * 0.25 for k in range(96)]}
+        reds = [c for c in seen if c[0] > c[1] and c[0] > c[2]]
+        greens = [c for c in seen if c[1] > c[0] and c[1] > c[2]]
+        blues = [c for c in seen if c[2] > c[0] and c[2] > c[1]]
+        self.assertTrue(reds and greens and blues)
+
+    def test_water_is_recognised_in_every_theme(self):
+        from light_studio.themes import names
+        for theme in names():
+            frame = render_rope('printing', 50, 0.0, 0, {'reduced_motion': True, 'theme': theme})
+            fill = round(0.5 * STATUS_POSITIONS)
+            for i in range(fill):
+                self.assertTrue(is_water(frame[i], theme), (theme, i, frame[i]))
+            for i in range(fill, STATUS_POSITIONS):
+                self.assertFalse(is_water(frame[i], theme), (theme, i, frame[i]))
+
+    def test_every_theme_stays_inside_the_message_budget(self):
+        from light_studio import transport as tp
+        from light_studio.studio import TICK_HZ
+        from light_studio.themes import names
+        for theme in names():
+            for state in STATES:
+                prev, changed = None, []
+                for k in range(120):
+                    since = 999 if state == 'finished' else None
+                    frame = render_rope(state, 42, k / TICK_HZ, 2,
+                                        dict(DEFAULTS, brightness=100, theme=theme),
+                                        since_complete=since, speed='ludicrous')
+                    if prev is not None:
+                        changed.append(len(tp.diff_runs(prev, frame)))
+                    prev = frame
+                self.assertLessEqual(sum(changed) / len(changed), tp.NODE_RATE / TICK_HZ * 0.75,
+                                     (theme, state))
+                self.assertLessEqual(max(changed), tp.MAX_MSGS_PER_NODE_TICK, (theme, state))
+
+
+class SpeedProfileTests(unittest.TestCase):
+    """Bambu's Silent / Standard / Sport / Ludicrous show as the tempo of the
+    rain, never as a colour (Adi, 2026-09-13: 'recognise ludicrous and sports
+    mode on them')."""
+
+    def drops(self, speed, seconds=12.0):
+        settings = {'brightness': 100}
+        still = render_rope('printing', 30, 0.0, 0, dict(settings, reduced_motion=True), speed=speed)
+        fill = round(0.3 * STATUS_POSITIONS)
+        landings = 0
+        prev_air = False
+        for k in range(int(seconds * 40)):
+            frame = render_rope('printing', 30, k / 40.0, 0, settings, speed=speed)
+            in_air = any(frame[i] != still[i] for i in range(fill + 3, STATUS_POSITIONS))
+            if prev_air and not in_air:
+                landings += 1
+            prev_air = in_air
+        return landings
+
+    def test_faster_profiles_rain_harder(self):
+        from light_studio.renderer import DROP_SPEED, SPEED_TEMPO
+        # Each faster profile falls faster and cycles sooner ...
+        cycles = [droplet_timing(60, DROP_SPEED * SPEED_TEMPO[s], SPEED_TEMPO[s])
+                  for s in ('silent', 'standard', 'sport', 'ludicrous')]
+        for (fall_a, cycle_a), (fall_b, cycle_b) in zip(cycles, cycles[1:]):
+            self.assertLess(fall_b, fall_a)
+            self.assertLess(cycle_b, cycle_a)
+        # ... so over a long enough window more drops land.
+        silent, standard = self.drops('silent', 40), self.drops('standard', 40)
+        sport, ludicrous = self.drops('sport', 40), self.drops('ludicrous', 40)
+        self.assertLess(silent, standard)
+        self.assertLessEqual(standard, sport)
+        self.assertLess(standard, ludicrous)
+
+    def test_sport_and_ludicrous_leave_a_trail_behind_the_drop(self):
+        """Adi, 2026-09-13: 'it should like leave trails or something'."""
+        from light_studio.renderer import TRAIL_LENGTH
+        settings = {'brightness': 100}
+        still = render_rope('printing', 20, 0.0, 0, dict(settings, reduced_motion=True))
+        fill = round(0.2 * STATUS_POSITIONS)
+
+        def widest_streak(speed):
+            widest = 0
+            for k in range(400):
+                frame = render_rope('printing', 20, k * 0.02, 0, settings, speed=speed)
+                moving = [i for i in range(fill + 4, STATUS_POSITIONS) if frame[i] != still[i]]
+                if moving:
+                    widest = max(widest, max(moving) - min(moving) + 1)
+            return widest
+
+        self.assertEqual(widest_streak('standard'), 1, 'a plain drop at standard speed')
+        self.assertGreaterEqual(widest_streak('sport'), 1 + TRAIL_LENGTH['sport'] - 1)
+        self.assertGreater(widest_streak('ludicrous'), widest_streak('sport'))
+        self.assertLessEqual(widest_streak('ludicrous'), 1 + TRAIL_LENGTH['ludicrous'])
+
+    def test_the_trail_never_reaches_into_the_water(self):
+        """Inside the water a pixel is water or the landing splash, never the
+        drop or its tail."""
+        from light_studio.renderer import PINK
+        settings = {'brightness': 100}
+        for percent in (5, 40, 85):
+            still = render_rope('printing', percent, 0.0, 0, dict(settings, reduced_motion=True))
+            fill = round(percent / 100 * STATUS_POSITIONS)
+            for k in range(300):
+                frame = render_rope('printing', percent, k * 0.03, 0, settings, speed='ludicrous')
+                for i in range(fill):
+                    if frame[i] == still[i]:
+                        continue
+                    # Not water: must be nearer the splash than the drop or tail.
+                    from light_studio.renderer import _chroma_distance
+                    to_splash = _chroma_distance(frame[i], PINK['splash'])
+                    self.assertLess(to_splash, _chroma_distance(frame[i], PINK['drop']), (percent, k, i))
+
+    def test_unknown_profile_is_standard_tempo(self):
+        for t in (0.0, 0.7, 2.3, 5.5):
+            self.assertEqual(render_rope('printing', 30, t, 0, {}, speed=None),
+                             render_rope('printing', 30, t, 0, {}, speed='standard'))
+            self.assertEqual(render_rope('printing', 30, t, 0, {}, speed='warp'),
+                             render_rope('printing', 30, t, 0, {}, speed='standard'))
+
+    def test_speed_never_changes_the_progress_or_the_colours(self):
+        for speed in ('silent', 'standard', 'sport', 'ludicrous'):
+            still = render_rope('printing', 40, 3.0, 0, {'reduced_motion': True}, speed=speed)
+            self.assertEqual(still, render_rope('printing', 40, 3.0, 0, {'reduced_motion': True}))
+            for t in (0.0, 0.9, 4.4):
+                for pixel in render_rope('printing', 40, t, 0, {'brightness': 100}, speed=speed):
+                    if sum(pixel):
+                        self.assertTrue(is_pink(pixel), (speed, t, pixel))
+
+    def test_ludicrous_rain_stays_inside_the_message_budget(self):
+        from light_studio import transport as tp
+        from light_studio.studio import TICK_HZ
+        prev, changed = None, []
+        for k in range(240):
+            frame = render_rope('printing', 12, k / TICK_HZ, 2, dict(DEFAULTS, brightness=100),
+                                speed='ludicrous')
+            if prev is not None:
+                changed.append(len(tp.diff_runs(prev, frame)))
+            prev = frame
+        self.assertLessEqual(sum(changed) / len(changed), tp.NODE_RATE / TICK_HZ * 0.75)
+        self.assertLessEqual(max(changed), tp.MAX_MSGS_PER_NODE_TICK)
+
+
 class PinkThemeTests(unittest.TestCase):
     """A running print: hot-pink fill under a remainder of progressively
     darker pinks (Adi, 2026-09-13: "a full pink theme", no white). Pure red

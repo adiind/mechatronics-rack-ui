@@ -69,6 +69,20 @@ class StateTests(unittest.TestCase):
         for raw, state in expected.items():
             self.assertEqual(normalize(report(raw), NOW)['state'], state)
 
+    def test_speed_profile_is_named_and_bounded(self):
+        # Bambu spd_lvl 1..4 -> Silent/Standard/Sport/Ludicrous; spd_mag is the
+        # feed-rate percentage. Anything else, or stale telemetry, is None.
+        for level, name in ((1, 'silent'), (2, 'standard'), (3, 'sport'), (4, 'ludicrous')):
+            row = normalize(report('RUNNING', speed_level=level, speed_percent=166), NOW)
+            self.assertEqual(row['speed'], name)
+            self.assertEqual(row['speed_percent'], 166)
+        for bad in (0, 5, 'fast', None, True, 2.5):
+            self.assertIsNone(normalize(report('RUNNING', speed_level=bad), NOW)['speed'])
+        self.assertIsNone(normalize(report('RUNNING', speed_percent=0), NOW)['speed_percent'])
+        self.assertIsNone(normalize(report('RUNNING', speed_percent=9000), NOW)['speed_percent'])
+        stale = normalize(report('RUNNING', speed_level=4, updated='2000-01-01 00:00:00'), NOW)
+        self.assertIsNone(stale['speed'])
+
     def test_failed_is_red_only_while_the_error_code_is_set(self):
         # Bambu keeps gcode_state=FAILED until the next print starts; dismissing
         # the error on the printer clears print_error, and the rope must follow:

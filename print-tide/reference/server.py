@@ -158,6 +158,10 @@ class Printer:
             # HMS entries are often mere warnings (AMS, filament) -- only a real
             # print_error should turn the bar red.
             if p.get("print_error") is not None:        st["has_error"] = p["print_error"] != 0
+            # Speed profile: spd_lvl 1 Silent, 2 Standard, 3 Sport, 4 Ludicrous;
+            # spd_mag is the matching feed-rate percentage (50/100/124/166).
+            if p.get("spd_lvl") is not None:            st["speed_level"] = p["spd_lvl"]
+            if p.get("spd_mag") is not None:            st["speed_percent"] = p["spd_mag"]
             # home_flag bit 23 is the enclosure door on X1/H2D-class machines
             # (printers without a door sensor simply never set it).
             if isinstance(p.get("home_flag"), int):     st["door_open"] = bool(p["home_flag"] & (1 << 23))

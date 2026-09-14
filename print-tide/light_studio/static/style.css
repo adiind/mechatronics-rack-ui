@@ -453,3 +453,14 @@ footer { display: flex; justify-content: space-between; padding: 24px 4vw; borde
   #scenarios { grid-template-columns: 1fr; }
   #toast { bottom: 130px; }
 }
+
+/* ---- colour theme picker ---- */
+.theme-picker { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 8px; margin: 6px 0 4px; }
+.theme-card { display: flex; flex-direction: column; gap: 6px; padding: 8px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--panel-2); color: var(--ink); cursor: pointer;
+  font: inherit; text-align: left; }
+.theme-card:hover { border-color: var(--muted); }
+.theme-card[aria-checked="true"] { border-color: var(--aqua); box-shadow: 0 0 0 2px #a2e9d744; }
+.theme-card .theme-name { font-size: 12px; letter-spacing: .04em; text-transform: uppercase; }
+.theme-card .theme-strip { display: flex; height: 10px; border-radius: 5px; overflow: hidden; }
+.theme-card .theme-strip i { flex: 1; display: block; }

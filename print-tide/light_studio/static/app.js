@@ -14,22 +14,27 @@ const clone = o => JSON.parse(JSON.stringify(o));
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
 const STATE_TEXT = {
-  idle:      ['Available',   'Free and ready. Resting dusty rose, no motion.'],
-  preparing: ['Preparing',   'The printer reported PREPARE. Light-pink sweep through a dark pink body.'],
-  printing:  ['Printing',    'Hot-pink fill rises through pinks that darken towards the top; light-pink drops fall into it.'],
-  paused:    ['Paused',      'Light pink breathing with steady deep-pink marks. Needs a look.'],
-  error:     ['Error',       'Deep fuchsia breathing, the most saturated pink on the wall. The printer reported a print error.'],
-  finished:  ['Collect',     'A smooth pink wash on completion, then the lightest pink until the door opens or it is marked collected.'],
-  stopped:   ['Stopped',     'Cancelled or failed and dismissed. Steady deep plum until the door opens or it is marked collected.'],
-  offline:   ['Offline',     'No fresh telemetry. Dim mauve heartbeat, no percentage.'],
-  unknown:   ['Unknown',     'Connected, but the reported state is not one we recognise. Pale pink dashes.'],
+  idle:      ['Available',   'Free and ready. The theme\'s resting colour, no motion.'],
+  preparing: ['Preparing',   'The printer reported PREPARE. A light sweep rising through a dark body.'],
+  printing:  ['Printing',    'Water rises through bands that darken towards the top; rain falls into it and streaks at Sport and Ludicrous speeds.'],
+  paused:    ['Paused',      'Slow breathing with steady end marks. Needs a look.'],
+  error:     ['Error',       'Deep, fast breathing. The printer reported a print error.'],
+  finished:  ['Collect',     'A smooth hue wash on completion, then the theme\'s lightest colour until the door opens or it is marked collected.'],
+  stopped:   ['Stopped',     'Cancelled or failed and dismissed. Dark and still until the door opens or it is marked collected.'],
+  offline:   ['Offline',     'No fresh telemetry. Dim heartbeat, no percentage.'],
+  unknown:   ['Unknown',     'Connected, but the reported state is not one we recognise. Dashes.'],
 };
 const SIM_STATES = Object.keys(STATE_TEXT);
+
+// Bambu speed profiles as the printer reports them (spd_lvl 1-4).
+const SPEED_TEXT = {
+  silent: 'Silent', standard: 'Standard', sport: 'Sport', ludicrous: 'Ludicrous',
+};
 
 const ACCENT_MODES = {
   white: 'Pure white',
   color: 'Solid colour',
-  rainbow: 'Pink sweep',
+  rainbow: 'Hue sweep (theme)',
 };
 
 /* Colour helpers. No regular expressions anywhere in this file. */
@@ -624,6 +629,11 @@ function updateCards() {
     const bits = [];
     const eta = minutesText(status.remaining_min);
     if (status.state === 'printing' && eta) bits.push(eta);
+    if ((status.state === 'printing' || status.state === 'preparing'
+         || status.state === 'paused') && SPEED_TEXT[status.speed]) {
+      bits.push(SPEED_TEXT[status.speed]
+        + (status.speed_percent ? ' ' + status.speed_percent + '%' : ''));
+    }
     if (status.layer !== null && status.layer !== undefined) {
       bits.push('layer ' + status.layer
         + (status.total_layer ? '/' + status.total_layer : ''));
@@ -752,8 +762,65 @@ function adopt() {
   walk.index = Math.min(walk.index, draft.slots.length - 1);
 }
 
+const LEGEND_SWATCH = {
+  idle: 'idle', preparing: 'prep', printing: 'water', paused: 'pause', error: 'error',
+  finished: 'collect', stopped: 'stopped', offline: 'offline', unknown: 'unknown',
+};
+
+function themeInfo(name) {
+  const list = (live && live.themes) || [];
+  return list.find(t => t.name === name) || list[0] || null;
+}
+
+function rgb(c) { return 'rgb(' + c.join(',') + ')'; }
+
+function buildThemePicker() {
+  const host = $('theme-picker');
+  if (!host || !live || !live.themes) return;
+  host.replaceChildren();
+  for (const theme of live.themes) {
+    const card = el('button', 'theme-card');
+    card.type = 'button';
+    card.setAttribute('role', 'radio');
+    card.dataset.theme = theme.name;
+    card.append(el('span', 'theme-name', theme.label));
+    const strip = el('span', 'theme-strip');
+    for (const key of ['idle', 'prep', 'water', 'rest', 'pause', 'error', 'collect', 'stopped']) {
+      const i = el('i');
+      i.style.background = rgb(theme.swatches[key]);
+      strip.append(i);
+    }
+    card.append(strip);
+    card.addEventListener('click', () => {
+      draft.settings.theme = theme.name;
+      refresh();
+      keepFed(labPlayer, true);
+      keepFed(livePlayer, true);
+    });
+    host.append(card);
+  }
+}
+
+function syncTheme() {
+  const name = draft ? draft.settings.theme : null;
+  const info = themeInfo(name);
+  for (const card of document.querySelectorAll('.theme-card')) {
+    card.setAttribute('aria-checked', String(card.dataset.theme === name));
+  }
+  if ($('theme-blurb')) $('theme-blurb').textContent = info ? info.blurb : '';
+  if (!info) return;
+  // Legend swatches follow the draft theme so the key always matches the preview.
+  const base = document.querySelector('.legend i:not([class])');
+  if (base) base.style.background = rgb(info.swatches.idle);
+  for (const [cls, key] of Object.entries(LEGEND_SWATCH)) {
+    const dot = document.querySelector('.legend i.' + cls);
+    if (dot && info.swatches[key]) dot.style.background = rgb(info.swatches[key]);
+  }
+}
+
 function syncSettingControls() {
   if (!draft) return;
+  syncTheme();
   $('brightness').value = draft.settings.brightness;
   $('brightness-out').textContent = Math.round(draft.settings.brightness) + '%';
   $('speed').value = draft.settings.speed;
@@ -985,6 +1052,7 @@ async function poll() {
     const adopting = first || (!dirty && revisionMoved);
     if (adopting) {
       adopt();
+      buildThemePicker();
       buildScenarios();
       buildLab();
     } else if (dirty && revisionMoved) {

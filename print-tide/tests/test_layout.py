@@ -84,6 +84,21 @@ class ValidationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate(config, MAP)
 
+    def test_theme_must_be_a_known_theme_and_defaults_to_pink(self):
+        from light_studio.themes import names
+        config = base()
+        config['settings']['theme'] = 'ocean'
+        self.assertEqual(validate(config, MAP)['settings']['theme'], 'ocean')
+        for bad in ('neon', '', 7, None, ['pink']):
+            config = base()
+            config['settings']['theme'] = bad
+            with self.assertRaises(ValueError, msg=bad):
+                validate(config, MAP)
+        config = base()
+        config['settings'].pop('theme', None)
+        self.assertEqual(validate(config, MAP)['settings']['theme'], 'pink')
+        self.assertIn('pink', names())
+
     def test_missing_settings_are_filled_from_defaults_not_rejected(self):
         config = base()
         config['settings'] = {'brightness': 10}

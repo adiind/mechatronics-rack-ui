@@ -704,3 +704,19 @@ class FilmTests(Harness):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ThemeViewTests(unittest.TestCase):
+    def test_the_view_lists_the_colour_themes_and_the_default_is_pink(self):
+        import tempfile
+        from test_core import report, studio
+        with tempfile.TemporaryDirectory() as tmp:
+            st = studio(tmp, rows=[report()])
+            view = st.view()
+            names = [t['name'] for t in view['themes']]
+            self.assertIn('pink', names)
+            self.assertIn('classic', names)
+            self.assertEqual(view['config']['settings']['theme'], 'pink')
+            for theme in view['themes']:
+                self.assertTrue(theme['label'] and theme['blurb'])
+                self.assertEqual(len(theme['swatches']['water']), 3)

@@ -72,8 +72,9 @@ clears the mark automatically.
 
 Set a **different simulated state per bay**, or pick a scenario, and watch the
 whole wall respond. This is a simulation: it cannot publish, and it cannot alter
-telemetry. The wall settings panel here (brightness, flow speed, ripples,
-quarter marks, reduced motion, quiet mode) and the far-end cap panel both edit
+telemetry. The colour theme picker, the wall settings panel (brightness, flow
+speed, ripples, quarter marks, reduced motion, quiet mode) and the far-end cap
+panel all edit
 the *same draft* as the map, so what you preview is what Save & apply will send.
 The preview runs through the same Python compositor as the hardware path,
 including your draft's cap settings and rope directions — but a browser canvas
@@ -109,7 +110,7 @@ dashed line at the zone boundary.
 ### Editing the caps
 
 * **Per rope**: open *Far-end cap* on a bay card in Map the wall. Mode
-  (Pure white / Solid colour / Rainbow), a colour picker, and cap brightness.
+  (Pure white / Solid colour / Hue sweep, which follows the theme), a colour picker, and cap brightness.
 * **All ropes at once**: either *Apply this cap to all ropes* inside a card, or
   the *Far-end caps · all ropes* panel in the Animation lab.
 * Caps are part of the single draft: they change the wall only on **Save &
@@ -134,19 +135,34 @@ first paint, apart from the ordinary 12-second resync.
 
 ## What the colours mean
 
-Every colour on the ropes is a shade of pink, never white or pastel (2026-09-13); states are told apart by lightness, saturation and motion.
+Colours come from a **theme**, chosen in the Animation lab under *Colour theme*
+and saved with the layout like every other wall setting. Every theme fills the
+same palette (water, remainder bands, drop, splash, pause, error, collect,
+stopped, offline, unknown, idle, identify, ripple tints and a hue-sweep range),
+so switching recolours the whole wall at once and nothing is left over from the
+previous look. The animation shapes never change with the theme.
+
+| Theme | Feel |
+| --- | --- |
+| Pink (default) | every colour a shade of pink, never white or pastel; states differ by lightness, saturation and motion |
+| Classic | one hue per meaning: orange water over deep blue, green collect, yellow pause, red error, magenta stopped, cyan idle, full rainbow on completion |
+| Ocean | blues, teals and aqua; pure blue breathing on error |
+| Ember | amber, gold and red fire tones |
+| Forest | leaf greens and moss; orange-red error |
+
+The shapes, whatever the theme:
 
 | State | Look | Trigger |
 | --- | --- | --- |
-| Available | solid resting dusty rose, no motion | `IDLE`/`READY`, fresh |
-| Preparing | light-pink sweep rising through a dark pink body | `PREPARE` only — never inferred from temperature |
-| Printing | hot-pink filled region, remainder in six bands of pink darkening from deep pink at the waterline towards the top, light-pink droplets and splashes, across the 90-position region | `RUNNING` |
-| Paused | light pink breathing with steady deep-pink marks at both ends | `PAUSE` |
-| Error | deep fuchsia breathing, the most saturated pink on the wall (almost no green) | `print_error` set (any gcode state) |
-| Stopped early | steady deep plum until the door opens or **Mark collected** | `FAILED` with `print_error` cleared (cancel, or a dismissed failure) |
-| Collect | 12 s smooth pink wash (one hue per tick, sweeping magenta-pink to rose and back) cross-fading into the lightest pink, held until the door opens or **Mark collected** | observed completion (wash), or retained `FINISH` (collect pink only) |
-| Offline | dim mauve double-thump heartbeat | link down, no timestamp, stale >120 s, or a future timestamp |
-| Unknown | pale greyish-pink dashes | connected, but the reported state is not one we recognise |
+| Available | solid resting colour, no motion | `IDLE`/`READY`, fresh |
+| Preparing | light sweep rising through a dark breathing body | `PREPARE` only — never inferred from temperature |
+| Printing | filled water region, remainder in six bands darkening from the waterline towards the top, rain falling into it; the Bambu speed profile sets the tempo, and Sport / Ludicrous drops leave a comet tail and splash wider | `RUNNING` (+ `spd_lvl`) |
+| Paused | slow breathing with steady marks at both ends | `PAUSE` |
+| Error | deep, faster breathing with steady end marks | `print_error` set (any gcode state) |
+| Stopped early | dark and still until the door opens or **Mark collected** | `FAILED` with `print_error` cleared (cancel, or a dismissed failure) |
+| Collect | 12 s smooth hue wash (one hue per tick) cross-fading into the theme's collect colour, held until the door opens or **Mark collected** | observed completion (wash), or retained `FINISH` (collect colour only) |
+| Offline | dim double-thump heartbeat | link down, no timestamp, stale >120 s, or a future timestamp |
+| Unknown | dim dashes | connected, but the reported state is not one we recognise |
 
 Error, pause, offline and unknown are never overwritten by cross-wall ripples,
 and error/pause keep a visibility floor even in quiet mode at low brightness.
