@@ -14,6 +14,10 @@ ropes in the EDI printer bay.
 > Confirmed by Adi on 2026-09-06: Print Tide is the main thing, not a preview.
 > Edits to `light_studio/` take effect on `systemctl --user restart printer-led-mcp.service`.
 >
+> Geometry since 2026-09-14 (Adi: "ignore the bottom 30% of every strip"):
+> physical 0–29 is an always-dark foot, 30–89 carries state, 90–99 is the cap.
+> See "Three zones per rope" below.
+>
 > Brightness: `BRIGHT_CAP` is 252 (effectively full) since 2026-09-06, and all
 > seven nodes were reflashed the same day with `color_correct: [80%,80%,80%]`
 > (was 55%). Firmware source of truth is now `firmware/` on this Pi; see
@@ -22,20 +26,40 @@ ropes in the EDI printer bay.
 
 It does three things:
 
-1. **Maps** printers to LED ropes so you can fix a mismatch visually instead of
+1. **Shows** the wall as it is: seven printers in physical order with name, state,
+   progress and time left readable in one glance, and a summary of what needs
+   attention.
+2. **Maps** printers to LED ropes so you can fix a mismatch visually instead of
    re-plugging controllers.
-2. **Animates** all seven ropes from one shared clock, with a distinct look per
+3. **Animates** all seven ropes from one shared clock, with a distinct look per
    printer state and gentle ripples across the wall.
-3. **Tells the truth** about what it knows: freshness, whether a completion was
+4. **Tells the truth** about what it knows: freshness, whether a completion was
    actually observed, and whether a light command was merely queued.
 
 ---
 
 ## Use it
 
-### Map the wall
+The studio opens on the **Live wall**: an attention line ("2 need attention · 4
+printing · 1 available", with a chip per affected printer that jumps to its
+card), then the seven bays in physical left-to-right order. Each card is the
+printer's name, its state as a word and a shape (⚠ error, ❚❚ paused, ■ stopped,
+✓ collect, ◯ offline, ? unknown), the percentage and time left in large type,
+the rope itself drawn as one slender object (dark foot at the bottom, active
+region, cap at the top, dashed lines at both boundaries), a one-line note, and
+a **Details** disclosure with job, layer, speed, temperatures, message age,
+rope acknowledgement and bay geometry. Unknown is shown as unknown, never as 0
+and never as "available". There is no Save button on this view.
 
-1. Open **Map the wall → Walk the wall**. Stand at the leftmost physical bay.
+**Configure** holds everything that changes the wall: mapping, names, order,
+direction, caps, Walk the wall, Undo and Start over. **Animation lab** holds
+the simulation, the colour theme and the wall settings. All three share one
+draft; the save bar appears only while the draft differs from what is on the
+wall, and says exactly what is pending.
+
+### Configure the wall
+
+1. Open **Configure → Walk the wall**. Stand at the leftmost physical bay.
    Press **Identify this rope**: that rope pulses cyan/white for five seconds
    and then returns to its real state on its own, even if you close the browser.
    * If the rope that lit up is the one in front of you, press **Yes, it's here**.
@@ -44,23 +68,29 @@ It does three things:
    the physical order, which is what ripple direction uses.
 2. To change which *printer* drives a rope, drag a printer name onto another
    bay, or use the **Driven by** menu (works on a phone, no dragging needed).
-3. Tick **Reverse status direction** if the bar fills the wrong way round;
-   progress then runs the other way inside the 90-position status region. The
-   far-end cap does not move — it is defined relative to the wire.
+3. Tick **Reverse fill direction** if the bar fills the wrong way round;
+   progress then runs the other way inside the 60-position active region
+   (physical 30–89). Neither the dark foot nor the far-end cap moves — both
+   are defined relative to the wire.
 4. Click a printer name to rename it. Names are display-only; telemetry
    identity (`printer1`…) never changes. Open **Far-end cap** to set that rope's
    accent colour, rainbow or brightness.
-5. Nothing you do here touches the wall until **Save & apply**. Until then the
-   bar at the bottom lists exactly what is pending, and changed bays are marked
-   **DRAFT**. **Discard draft** reverts; **Undo last save** restores the layout
-   before the last save.
+5. Nothing you do here touches the wall until **Save & apply**. As soon as the
+   draft differs from the wall a bar appears at the bottom listing exactly what
+   is pending, and changed bays are marked **DRAFT**. **Discard draft**
+   reverts; **Undo last save** (in Configure) restores the layout before the
+   last save.
 
 ### Watch it
 
-Each bay shows the live pattern its printer's rope is playing right now, plus
-plain text: state, percentage, ETA, layer, nozzle/bed, and how long ago the last
-message arrived. Unknown is shown as unknown — never as `0` and never as
-"available".
+Each bay on the Live wall shows the pattern its printer's rope is playing right
+now, plus plain text: state, percentage, time left, and under Details the job,
+layer, nozzle/bed, how long ago the last message arrived and whether the rope
+controller acknowledged its last command (an acknowledgement is proof the
+command arrived, not proof of how the LEDs look). Unknown is shown as unknown
+— never as `0` and never as "available". An error card says the printer
+reports an error and asks you to inspect the printer; the wall never guesses
+a cause.
 
 When a print you were watching finishes, that bay celebrates briefly, one ripple
 crosses the wall, and the rope settles to steady green. Press **Mark collected**
@@ -70,12 +100,16 @@ clears the mark automatically.
 
 ### Animation lab
 
-Set a **different simulated state per bay**, or pick a scenario, and watch the
-whole wall respond. This is a simulation: it cannot publish, and it cannot alter
-telemetry. The colour theme picker, the wall settings panel (brightness, flow
-speed, ripples, quarter marks, reduced motion, quiet mode) and the far-end cap
-panel all edit
-the *same draft* as the map, so what you preview is what Save & apply will send.
+Set a **different simulated state per bay** (including "% not reported"), or
+pick a scenario — *Busy afternoon*, *Quiet night*, *Needs attention*, *Progress
+check* (0/25/50/75/100 % and unknown) or *Every state* — and watch the whole
+wall respond. Each simulated rope is labelled with its state and percentage.
+This is a simulation: it cannot publish, it cannot alter telemetry, and
+choosing a scenario never dirties the saved layout. The colour theme picker,
+the wall settings panel (brightness, flow speed, ripples, the screen-only quarter guides toggle,
+reduced motion, quiet mode) and the far-end cap panel all edit the *same
+draft* as Configure; the "Preview versus the wall" box says whether the preview
+shows pending changes, and offers to discard them.
 The preview runs through the same Python compositor as the hardware path,
 including your draft's cap settings and rope directions — but a browser canvas
 can only show you the *intent*, never how smooth the physical rope will look.
@@ -86,45 +120,67 @@ can only show you the *intent*, never how smooth the physical rope will look.
 
 Two read-only pages sit beside the studio, linked from its header:
 
-* **`/states` — States & animations.** Every state a rope can be in, with a
-  live preview from the real renderer, the Bambu report that triggers it, what
-  the animation does and what ends it; a table of how a `gcode_state` becomes a
-  wall state; the speed-profile table (Silent / Standard / Sport / Ludicrous →
-  rain tempo, comet tail, splash); the selected theme's palette; and a "live
-  wall" strip showing all seven ropes right now with state and speed. A theme
+* **`/states` — States.** Every state a rope can be in as *what you see / what
+  it means / what to do*, with a live preview from the real renderer and the
+  protocol detail (trigger, what ends it, palette keys) behind a "Technical
+  detail" disclosure; a geometry scale bar (30 dark / 60 active / 10 cap); a
+  table of how a `gcode_state` becomes a wall state; the speed-profile table;
+  the selected theme's palette; and a "live wall" strip showing all seven
+  ropes right now, each name linking to its card on the Live wall. A theme
   selector previews any theme without touching the wall.
-* **`/logs` — Telemetry logs.** What the seven printers actually send, one
-  column per printer, paced for people: one entry per *change* in the MQTT
-  `report` payload (old → new, with a plain-English gloss for the fields the
-  wall uses and "not used yet" for the rest), noisy fields folded into a quiet
-  ticking line, each entry expandable to the raw JSON, and a line saying what
-  the wall made of it. Hosts, serials and access codes are stripped before
-  anything leaves the host process.
+* **`/logs` — Telemetry.** What the seven printers actually send, paced for
+  people: one entry per *change* in the MQTT `report` payload with a readable
+  headline ("Progress 33% → 34%", "State RUNNING → FINISH (Collect)", "Door
+  opened"), meaningful changes shown by default with sensor ticking folded and
+  unused fields counted rather than listed, every entry expandable to the raw
+  redacted JSON, and a line saying what the wall made of it. **Pause** freezes
+  the reading surface: polling continues quietly, new changes are counted on
+  the button, and **Resume** jumps to the latest. All seven printers stay
+  selectable even with no reports. The Pi keeps the last 400 reports per
+  printer in memory; the page says so. Hosts, serials, access codes and
+  private URLs are stripped before anything leaves the host process.
 
-## Two zones per rope
+## Three zones per rope
 
 Each rope is 100 *addressable positions* (WS2811 modules — not 100 individual
-dies), split into two independently composed zones:
+dies). Physical index 0 is the data-in wire, which hangs at the **bottom** of
+every rope on this wall. Since 2026-09-14 (Adi: "ignore the bottom 30% of every
+strip; loading starts above that point") a rope is three independently composed
+zones:
 
 ```
-physical 0 .......................... 89 | 90 ............ 99
-^ data-in wire                           |                 ^ far end
-<------------ status region (90) ------->|<-- accent cap -->
+physical 0 ........ 29 | 30 ...................... 89 | 90 ........ 99
+^ data-in wire (bottom)|                              |     far end ^
+<-- inactive foot (30)-><----- active region (60) ---->|<- accent (10)>
 ```
 
-* **Status region — 90 positions.** All printer state and animation. Progress is
-  measured across these 90 alone: 0/50/100% is 0/45/90 positions. **The cap is
-  not part of the percentage.**
-* **Accent cap — 10 positions**, at the end opposite the wire. Solid neutral
-  white by default; per rope you can pick any solid colour, switch to rainbow,
-  and set its own brightness. It never shows printer state. Errors, pauses,
-  celebrations, ripples and Identify all stay inside the status region.
+* **Inactive foot — 30 positions**, physical 0–29. Always dark. No state, drop,
+  splash, marker, ripple, celebration or Identify may light it. The renderer
+  never produces pixels for it, and `compose_rope` masks it again after
+  composition as the final invariant, so a bug anywhere upstream still cannot
+  light it. On the wire it costs one `range` message per full repaint.
+* **Active region — 60 positions**, physical 30–89. All printer state and
+  animation. Progress is measured across these 60 alone: 0/25/50/75/100 % is
+  0/15/30/45/60 positions, filling upward from position 30. **Neither the foot
+  nor the cap is part of the percentage.** Unknown progress is a travelling
+  marker over a dim body, never a false 0 %.
+* **Accent cap — 10 positions**, physical 90–99, at the end opposite the wire.
+  Solid neutral white by default; per rope you can pick any solid colour,
+  switch to rainbow, and set its own brightness. It never shows printer state.
 
-**Reversing a rope flips the status region only.** The cap's location is defined
-relative to the wire, so it can never move to the wire end. The card under each
-bay says "fills away from the wire" or "fills toward the wire", and the preview
-draws physical position 0 at the bottom with `WIRE` and `CAP` end labels and a
-dashed line at the zone boundary.
+**Reversing a rope flips the active region only**, inside physical 30–89. The
+foot stays at the wire end and the cap at the far end because both are defined
+relative to the wire, not to the direction the bar fills. The card under each
+bay says "fills away from the wire" or "fills toward the wire", and every
+preview draws physical position 0 at the bottom with `WIRE` and `CAP` end
+labels, the foot as an unlit section marked `OFF 30%`, and dashed lines at both
+zone boundaries. The `/api/state` and film payloads carry `inactive_positions`,
+`status_start`, `status_positions`, `accent_positions` and `accent_start`; the
+browser draws from those numbers and never assumes them.
+
+Physical placement is fixed: a reversed installation would still have its foot
+at the wire end. If a rope were ever hung wire-up, that would need an explicit
+orientation model, not a flipped exclusion — none of the seven is today.
 
 ### Editing the caps
 
@@ -230,7 +286,8 @@ credentials.
 
 ## Hardware limits, honestly
 
-* Only `node02`–`node08`, 100 addressable positions each (90 status + 10 cap).
+* Only `node02`–`node08`, 100 addressable positions each (30 dark foot + 60
+  active + 10 cap).
   `node01` is the unrelated rack/wall pilot and is rejected by pattern in the
   mapping, in Identify and in the initial-map check.
 * The rope's own smoothness is the acceptance test. The previous provisional

@@ -109,8 +109,10 @@ class DistinctnessTests(unittest.TestCase):
                             for t in ticks) / len(ticks)
         self.assertLess(offline_mean, printing_mean)
         offline = render_rope('offline', None, 0.5, 0, {'brightness': 100})
-        self.assertEqual(len({tuple(p) for p in offline[:40]}
-                             & {tuple(p) for p in offline[60:]}), 1)
+        # Uniform either side of the small centre mark: no waterline anywhere.
+        third = STATUS_POSITIONS // 3
+        self.assertEqual(len({tuple(p) for p in offline[:third]}
+                             & {tuple(p) for p in offline[-third:]}), 1)
 
     def test_unknown_is_a_washed_out_dashed_pink_not_the_offline_heartbeat(self):
         unknown = render_rope('unknown', None, 1.0, 0, {'brightness': 100})
@@ -152,8 +154,8 @@ class ProgressTests(unittest.TestCase):
     def test_the_droplet_cycle_always_outlasts_the_fall_and_the_splash(self):
         """Regression: a fixed 2 s cycle silently broke below ~40% progress.
 
-        With a 90-position region an empty bucket needs ~3 s of falling, so the
-        droplet used to reset in mid-air and never land.
+        With a 90-position region an empty bucket needed ~3 s of falling (now
+        ~2 s across 60), so the droplet used to reset in mid-air and never land.
         """
         for travel in range(0, STATUS_POSITIONS):
             fall, cycle = droplet_timing(travel)
@@ -184,8 +186,10 @@ class ProgressTests(unittest.TestCase):
             self.assertTrue(seen, f'no droplet at {percent}%')
             self.assertLessEqual(min(seen), fill + 2,
                                  f'droplet never reached the waterline at {percent}%')
-            self.assertGreater(max(seen), fill + 5,
-                               f'droplet never started high at {percent}%')
+            # Starts at the top of whatever headroom exists (at 90% of a
+            # 60-position region that is only five positions).
+            self.assertGreaterEqual(max(seen), min(fill + 5, STATUS_POSITIONS - 1),
+                                    f'droplet never started high at {percent}%')
 
 
 class ThemeTests(unittest.TestCase):

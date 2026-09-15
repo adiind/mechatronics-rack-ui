@@ -93,7 +93,10 @@ class JavaScriptTests(unittest.TestCase):
     def test_the_client_only_calls_endpoints_the_server_serves(self):
         calls = set(re.findall(r"api\('([a-z]+)", APP))
         self.assertEqual(calls, {'state', 'film', 'preview', 'config', 'undo',
-                                 'reset', 'identify', 'collected'})
+                                 'reset', 'identify', 'collected', 'media'})
+        # The only image URL the client ever builds is the one the server hands it.
+        self.assertIn("img.src = info.url + '?v='", APP)
+        self.assertNotIn("'/media/camera/' +", APP)
 
     def test_simulation_and_live_playback_use_different_endpoints(self):
         self.assertIn("api('film", APP)          # live: read-only GET
@@ -134,20 +137,88 @@ class HTMLTests(unittest.TestCase):
         self.assertIn('lang="en"', HTML)
         self.assertGreaterEqual(HTML.count('aria-label'), 3)
 
-    def test_the_legend_names_every_state_in_words_not_only_colour(self):
+    def test_every_state_has_a_word_a_meaning_and_a_shape(self):
+        table = APP.split('const STATE_TEXT = {')[1].split('};')[0]
+        for key in ('idle', 'preparing', 'printing', 'paused', 'error', 'finished',
+                    'stopped', 'offline', 'unknown'):
+            line = [l for l in table.splitlines() if l.strip().startswith(key + ':')][0].rstrip()
+            self.assertTrue(line.endswith("'],"), key)
+            glyph = line[:-3]
+            glyph = glyph[glyph.rfind(", '") + 3:]
+            self.assertTrue(1 <= len(glyph) <= 2, (key, glyph))
         for word in ('Available', 'Preparing', 'Printing', 'Paused', 'Error',
-                     'Collect', 'Offline', 'Unknown'):
+                     'Ready to collect', 'Stopped early', 'Offline', 'Unknown'):
+            self.assertIn("'" + word + "'", APP, word)
+
+    def test_simulation_is_labelled_and_separated_from_wall_settings(self):
+        self.assertIn('id="lab-badge"', HTML)
+        self.assertIn('change only this preview', HTML)
+        self.assertIn('never the physical', HTML)
+        self.assertIn('become a draft that reaches the wall when you save', HTML)
+        self.assertIn('saved with the wall', HTML)
+        self.assertIn('screen only', HTML)
+
+    def test_the_three_zones_are_explained_in_words_not_only_drawn(self):
+        for phrase in ('bottom 30 positions', 'always dark', 'next 60 carry printer state',
+                       'last 10 are an always-on cap', 'measured across these 60 only',
+                       'the dark foot and the cap never move', 'Bottom 30% stays dark'):
+            self.assertIn(phrase, HTML, phrase)
+        self.assertNotIn('Bottom third', HTML)
+
+    def test_the_live_wall_is_the_default_view_and_carries_no_marketing(self):
+        self.assertIn('id="live-tab"', HTML)
+        self.assertIn('aria-selected="true">Live wall', HTML)
+        for banned in ('Everything in flow', 'Where it can go', 'journey', 'magic'):
+            self.assertNotIn(banned, HTML, banned)
+        self.assertIn('id="attention-summary"', HTML)
+        self.assertIn('id="stage-canvas"', HTML)
+        self.assertIn('id="inspector"', HTML)
+
+    def test_the_masthead_names_only_the_product(self):
+        # Adi, 14 Sep 2026: "Don't use Northwestern name in it. That was just context."
+        head = HTML.split('<main>')[0]
+        self.assertIn('class="product"><a href="/" aria-label="Filament wall home">Filament wall</a>', head)
+        self.assertIn('<title>Filament wall</title>', HTML)
+        for banned in ('Northwestern', 'Engineering Design Innovation', 'EDI'):
+            self.assertNotIn(banned, HTML, banned)
+            self.assertNotIn(banned, APP, banned)
+        for view in ('Live wall', 'Configure', 'Animation lab', 'States', 'Telemetry'):
+            self.assertIn(view, head, view)
+        # Implementation detail stays out of the ordinary composition.
+        live = HTML.split('<section id="live"')[1].split('</section>')[0]
+        for noise in ('Tailscale', 'node0', 'ACK', 'WIRE', 'CAP</'):
+            self.assertNotIn(noise, live, noise)
+
+    def test_the_inspector_carries_a_camera_image_with_honest_states(self):
+        self.assertIn('id="photo-img"', HTML)
+        self.assertIn('id="photo-empty"', HTML)
+        self.assertIn('id="photo-caption"', HTML)
+        self.assertIn('<dialog class="lightbox"', HTML)
+        for phrase in ("'Recent capture · '", "'Saved capture · '", "not live",
+                       'No usable camera image', 'No camera image for this printer yet',
+                       'did not decode as a picture', 'img.naturalWidth > 0', 'img.onerror = '):
+            self.assertIn(phrase, APP, phrase)
+        self.assertIn('showModal', APP)
+        self.assertIn("'Demo photo'", APP)
+        self.assertIn('not the simulated job', APP)
+
+    def test_the_save_bar_is_absent_until_there_is_a_draft(self):
+        bar = HTML.split('id="savebar"')[1].split('>')[0]
+        self.assertIn('hidden', bar)
+        self.assertIn("$('savebar').hidden = !dirty", APP)
+        self.assertNotIn('id="undo"', HTML.split('id="savebar"')[1],
+                         'Undo belongs to Configure, not to a permanent bar')
+
+    def test_the_navigation_names_the_five_surfaces(self):
+        for word in ('Live wall', 'Configure', 'Animation lab', 'href="/states"', 'href="/logs"'):
             self.assertIn(word, HTML, word)
 
-    def test_simulation_is_labelled_as_simulation(self):
-        self.assertIn('SIMULATION', HTML)
-        self.assertIn('Nothing here reaches a printer or a light', HTML)
-
-    def test_the_two_zones_are_explained_in_words_not_only_drawn(self):
-        for phrase in ('90 positions of printer state', '10-position cap',
-                       'opposite the wire', 'not part of the percentage',
-                       'never moves the cap'):
-            self.assertIn(phrase, HTML, phrase)
+    def test_the_lab_offers_the_progress_endpoints_and_unknown(self):
+        check = APP.split("'Progress check'")[1].split(']),')[0]
+        for token in ("['printing', 0]", "['printing', 25]", "['printing', 50]",
+                      "['printing', 75]", "['printing', 100]", "['printing', null]"):
+            self.assertIn(token, check, token)
+        self.assertIn('% not reported', APP)
 
     def test_the_cap_controls_offer_white_colour_rainbow_and_apply_to_all(self):
         for token in ('value="white"', 'value="color"', 'value="rainbow"',
@@ -156,11 +227,18 @@ class HTMLTests(unittest.TestCase):
 
 
 class AccentClientTests(unittest.TestCase):
-    def test_the_client_draws_the_zone_boundary_from_server_data(self):
+    def test_the_client_draws_the_zone_boundaries_from_server_data(self):
         self.assertIn('accent_start', APP)
         self.assertIn('accentStart', APP)
+        self.assertIn('status_start', APP)
+        self.assertIn('statusStart', APP)
         # The split is never hard-coded in the browser.
-        self.assertNotIn('90', APP.split('function drawRope')[1].split('}')[0])
+        body = APP.split('function drawRope')[1].split('function endLabels')[0]
+        for literal in ('90', '60', '30'):
+            self.assertNotIn(literal, body, literal)
+        # Both edges are computed from the film metadata, and the foot is drawn.
+        self.assertIn('foot / pixels', body)
+        self.assertIn('accentStart / pixels', body)
 
     def test_the_client_labels_the_wire_and_cap_ends(self):
         self.assertIn("'WIRE'", APP)
@@ -210,13 +288,15 @@ class CSSTests(unittest.TestCase):
         self.assertTrue(balanced(re.sub(r'/\*.*?\*/', '', CSS, flags=re.S)))
 
     def test_classes_the_client_creates_are_all_styled(self):
-        needed = ['.bay', '.bay.drafted', '.bay.identifying', '.bay.walking',
-                  '.rename-input', '.printer-name', '.rope-stage', '.reading',
-                  '.state', '.status-meta', '.identify', '.collected',
-                  '.reverse', '.reorder', '.sim-grid', '.sim-cell', '.sim-title',
+        needed = ['.assign-row', '.assign-row.drafted', '.assign-row.identifying', '.assign-row.walking',
+                  '.rename-input', '.printer-name', '.ar-strip', '.ar-state',
+                  '.identify', '.reverse', '.reorder', '.sim-grid', '.sim-cell', '.sim-title',
                   '.sim-range', '.sim-pct', '.savebar', '.walk-actions', '#toast',
                   '.accent', '.accent-color', '.accent-level', '.accent-all',
-                  '#cap-color', '#cap-mode', '.zone-note']
+                  '.stage-label', '.sl-state', '.sl-reading', '.sl-sub',
+                  '.fleet-row', '.fr-state', '.fr-reading', '.alert-chip', '.pending',
+                  '.sim-unknown', '.masthead', '.inspector', '.photo-frame', '.photo-frame.compact',
+                  '.sheet-bar', '.lightbox', '.lab-label', '.theme-card[aria-checked="true"]']
         for selector in needed:
             self.assertIn(selector, CSS, selector)
 
@@ -226,8 +306,27 @@ class CSSTests(unittest.TestCase):
         self.assertNotIn('https://', CSS)
 
     def test_the_wall_fits_on_a_phone(self):
-        self.assertIn('repeat(2, minmax(0, 1fr))', CSS)
-        self.assertIn('@media (max-width: 620px)', CSS)
+        phone = CSS.split('@media (max-width: 700px)')[1]
+        # Seven concise rows replace the stage; the inspector opens as a sheet.
+        self.assertIn('.stage { display: none; }', phone)
+        self.assertIn('.fleet-rows { display: flex;', phone)
+        self.assertIn('body.sheet-open .inspector', phone)
+        self.assertIn(".fleet-alerts .alert-chip:not(:first-child) { display: none; }", phone)
+        # Navigation wraps so the fifth destination stays visible.
+        self.assertIn('flex-wrap: wrap', CSS.split('@media (max-width: 900px)')[1].split('}')[0] + CSS.split('@media (max-width: 900px)')[1])
+        # No permanent bottom padding: the save bar reserves space only when shown.
+        self.assertIn('body.has-savebar', CSS)
+        self.assertNotIn('padding-bottom: 92px', CSS)
+
+    def test_fonts_are_local_open_licensed_and_declared(self):
+        for face in ('Poppins-Regular.ttf', 'Poppins-SemiBold.ttf', 'IBMPlexSans-Variable.ttf'):
+            self.assertIn("url('/fonts/" + face + "')", CSS, face)
+            self.assertTrue((STATIC / 'fonts' / face).stat().st_size > 10000, face)
+        for licence in ('OFL-Poppins.txt', 'OFL-IBMPlexSans.txt'):
+            text = (STATIC / 'fonts' / licence).read_text(encoding='utf8')
+            self.assertIn('SIL Open Font License', text, licence)
+        self.assertIn('#4E2A84', CSS)                 # the purple anchor stays
+        self.assertNotIn('#0b151a', CSS.lower())      # the rejected blue chrome is gone
 
 
 if __name__ == '__main__':

@@ -13,9 +13,9 @@ from .layout import (ACCENT_MODES, Conflict, DEFAULT_ACCENT, DEFAULTS, LayoutSto
                      SCHEMA, atomic_write, default_layout, merge_accent,
                      merge_settings, validate, validate_accent, validate_settings)
 from .model import STALE_AFTER, STATES, freshness, normalize, number
-from .renderer import (ACCENT_POSITIONS, BRIGHT_CAP, PIXELS, QUANT,
-                       STATUS_POSITIONS, compose_rope, render, render_accent,
-                       render_rope)
+from .renderer import (ACCENT_POSITIONS, ACCENT_START, BRIGHT_CAP, INACTIVE_POSITIONS,
+                       PIXELS, QUANT, STATUS_POSITIONS, STATUS_START, compose_rope,
+                       mask_inactive, render, render_accent, render_rope)
 from .studio import Studio
 
 #: Kept for older callers that imported ``core.atomic``.
@@ -24,6 +24,7 @@ atomic = atomic_write
 __all__ = [
     'Studio', 'Conflict', 'LayoutStore', 'DEFAULTS', 'SCHEMA', 'STATES',
     'STALE_AFTER', 'PIXELS', 'STATUS_POSITIONS', 'ACCENT_POSITIONS',
+    'INACTIVE_POSITIONS', 'STATUS_START', 'ACCENT_START', 'mask_inactive',
     'ACCENT_MODES', 'DEFAULT_ACCENT', 'BRIGHT_CAP', 'QUANT',
     'normalize', 'freshness', 'number', 'validate', 'validate_settings',
     'validate_accent', 'default_layout', 'merge_settings', 'merge_accent',

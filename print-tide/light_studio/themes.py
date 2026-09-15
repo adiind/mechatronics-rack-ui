@@ -133,32 +133,81 @@ THEMES = {
     },
 }
 
-#: Presentation order in the picker.
-ORDER = ('pink', 'classic', 'ocean', 'ember', 'forest')
+# Curated combinations: progress, remaining, collect, available, alarm, category.
+# Supporting tones are derived consistently; the five original palettes above
+# remain byte-for-byte unchanged.
+CURATED = [
+ ('aurora','Aurora','Electric mint crossing violet dusk.','#54FFD2','#682AAA','#D5FF93','#287D92','#FF4979','Nature'),
+ ('sunset','Sunset','Tangerine progress against plum, with a rose finish.','#FF8D37','#6B275D','#FFD3A5','#BF507C','#FF3048','Warm'),
+ ('lavender','Lavender','Lilac, ink blue and a soft peach finish.','#B999FF','#182B68','#FFD3C5','#746BA0','#F4568F','Soft'),
+ ('cherry','Cherry blossom','Rose petals, burgundy shadows and spring green.','#FFA2BA','#722448','#D8FFC9','#B9667D','#EF174A','Soft'),
+ ('glacier','Glacier','Ice blue, navy and crisp cool light.','#83D9FF','#123B79','#D9FFF9','#267BA0','#FF566A','Nature'),
+ ('desert','Desert','Ochre, terracotta and sage after the heat.','#EBC065','#783F2A','#CBE1A0','#9B7650','#EC4C36','Warm'),
+ ('copper','Copper','Burnished orange against petrol green.','#F89462','#234B52','#FFDDB0','#728C85','#FA394B','Warm'),
+ ('moonlight','Moonlight','Silver-blue progress, indigo shadows, pale gold finish.','#C4D5EC','#303A67','#F9E6AF','#566687','#F283A4','Minimal'),
+ ('candy','Candy','Bubblegum, grape and a lemon-sherbet finish.','#FF75CD','#6331A5','#FFF095','#67C8E8','#FF304C','Neon'),
+ ('cyberpunk','Cyberpunk','Acid yellow and electric violet, hot coral alarms.','#EAFE32','#8620D6','#7AFFBC','#187F99','#FF355D','Neon'),
+ ('synthwave','Synthwave','Hot magenta over cobalt with turquoise highlights.','#FC4DAC','#243ED0','#78FFE3','#784CAC','#FF533D','Neon'),
+ ('acid','Acid','Chartreuse progress over ultraviolet shadows.','#B8FF2C','#522593','#DFFFA6','#308F72','#FF4A37','Neon'),
+ ('lagoon','Lagoon','Turquoise water, blue depths and sunlit peach.','#38D7B2','#246A9E','#FFD29C','#3B9387','#F95B67','Nature'),
+ ('rose_gold','Rose gold','Blush metal, wine shadows and warm ivory.','#F8B29A','#723D54','#FFE3B6','#B87877','#E84E6B','Soft'),
+ ('monochrome','Monochrome','Neutral silver, charcoal and white; motion carries meaning.','#B8BBC4','#413427','#F0F0F0','#737373','#DADADA','Minimal'),
+]
+
+def _rgb(value):
+    return tuple(int(value[i:i+2],16) for i in (1,3,5))
+
+def _blend(a,b,k):
+    return tuple(round(x*(1-k)+y*k) for x,y in zip(a,b))
+
+for name,label,blurb,water,rest,collect,idle,error,category in CURATED:
+    w,r,c,i,e=map(_rgb,(water,rest,collect,idle,error))
+    THEMES[name]={'label':label,'blurb':blurb,'category':category,'palette':{
+      'water':w,'rest':r,'deep':_blend(r,(0,0,0),.55),
+      'drop':_blend(w,c,.7),'splash':_blend(w,c,.85),
+      'prep_low':_blend(i,(0,0,0),.84),'prep_high':_blend(i,(0,0,0),.5),'prep':_blend(i,c,.5),
+      'pause':_blend(w,(255,195,55),.65),'pause_mark':_blend(c,(255,225,140),.5),
+      'error':e,'error_mark':_blend(e,c,.7),'collect':c,'stopped':_blend(e,r,.6),
+      'offline':_blend(i,r,.65),'unknown':_blend(r,c,.3),'idle':i,
+      'ident_body':w,'ident_core':c,'ripple_complete':c,'ripple_other':w,
+      'hue_low':0.,'hue_high':1.,'hue_soften':.65}}
+
+for name,cat in [('pink','Soft'),('classic','Minimal'),('ocean','Nature'),('ember','Warm'),('forest','Nature')]:
+    THEMES[name]['category']=cat
+ORDER = tuple(THEMES)
+COLOUR_KEYS = tuple(k for k in PALETTE_KEYS if not k.startswith('hue_'))
 
 
 def names():
     return list(ORDER)
 
 
-def palette(name=None):
-    """The palette for ``name``; unknown or missing names fall back to the default."""
-    theme = THEMES.get(name if isinstance(name, str) else None) or THEMES[DEFAULT_THEME]
-    return theme['palette']
+def palette(name=None, overrides=None):
+    """Resolve a palette without mutating a built-in. Callers validate overrides."""
+    theme = THEMES.get(name if isinstance(name,str) else None) or THEMES[DEFAULT_THEME]
+    base=theme['palette']
+    if not overrides:
+        return base
+    out=dict(base)
+    for key, value in overrides.items():
+        if key in COLOUR_KEYS:
+            out[key]=tuple(value)
+    # Highlights follow custom primary colours, unless explicitly overridden.
+    derived={}
+    if 'water' in overrides:
+        derived.update(drop=_blend(out['water'],out['collect'],.65),splash=_blend(out['water'],out['collect'],.8),ident_body=out['water'],ripple_other=out['water'])
+    if 'rest' in overrides: derived['deep']=_blend(out['rest'],(0,0,0),.78)
+    if 'prep' in overrides: derived.update(prep_low=_blend(out['prep'],(0,0,0),.85),prep_high=_blend(out['prep'],(0,0,0),.6))
+    for key in ('pause','error'):
+        if key in overrides: derived[key+'_mark']=_blend(out[key],(255,255,255),.65)
+    if 'collect' in overrides: derived.update(ripple_complete=out['collect'],ident_core=out['collect'])
+    out.update({k:v for k,v in derived.items() if k not in overrides})
+    return out
 
 
 def describe():
-    """Picker payload: name, label, blurb and the swatches the legend shows."""
-    out = []
-    for name in ORDER:
-        theme = THEMES[name]
-        pal = theme['palette']
-        out.append({
-            'name': name,
-            'label': theme['label'],
-            'blurb': theme['blurb'],
-            'swatches': {key: list(pal[key]) for key in (
-                'idle', 'prep', 'water', 'rest', 'pause', 'error', 'collect',
-                'stopped', 'offline', 'unknown')},
-        })
-    return out
+    return [{'name':name,'label':THEMES[name]['label'],'blurb':THEMES[name]['blurb'],
+             'category':THEMES[name]['category'],
+             'summary': {'pink':'Pink throughout; lightness and motion distinguish each state.','classic':'Orange progress, blue remainder, green finish and red alerts.','ocean':'Cyan progress over deep blue with an aqua finish.','ember':'Amber progress, red coals and a pale gold finish.','forest':'Leaf green and moss, mint finish and orange-red alerts.'}.get(name,THEMES[name]['blurb']),
+             'palette':{k:list(v) if isinstance(v,tuple) else v for k,v in palette(name).items()},
+             'swatches':{k:list(palette(name)[k]) for k in COLOUR_KEYS}} for name in ORDER]

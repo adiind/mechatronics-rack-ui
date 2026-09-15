@@ -3,217 +3,274 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Print Tide · Printer Light Studio</title>
+<title>Filament wall</title>
 <link rel="stylesheet" href="/style.css">
+<script src="/customization.js" defer></script>
 <script src="/app.js" defer></script>
 </head>
 <body>
 
-<header>
-  <a class="wordmark" href="/">print<span>tide</span><i>&#8776;</i></a>
+<header class="masthead">
+  <div class="masthead-brand">
+    <h1 class="product"><a href="/" aria-label="Filament wall home">Filament wall</a></h1>
+  </div>
+  <nav class="views" aria-label="Views" role="tablist">
+    <button class="tab active" id="live-tab" role="tab" aria-controls="live" aria-selected="true">Live wall</button>
+    <button class="tab" id="config-tab" role="tab" aria-controls="mapping" aria-selected="false">Configure</button>
+    <button class="tab" id="lab-tab" role="tab" aria-controls="lab" aria-selected="false">Animation lab</button>
+    <a class="tab" href="/states">States</a>
+    <a class="tab" href="/logs">Telemetry</a>
+  </nav>
   <div class="connection">
     <b id="connection">Connecting to the Pi&#8230;</b>
-    <span id="mode">PRINTER LIGHT STUDIO</span>
+    <span id="mode"></span>
   </div>
 </header>
 
 <main>
-  <section class="intro">
-    <div>
-      <div class="eyebrow">THE PRINTER BAY / NORTHWESTERN EDI</div>
-      <h1>Everything in its place.<br><em>Everything in flow.</em></h1>
-      <p>Give every printer its own light. Arrange the wall, find a rope,<br class="desktop">
-         and make seven machines move together.</p>
+  <!-- ===================================================== LIVE WALL -->
+  <section id="live" aria-label="Live wall">
+    <div class="fleet-line">
+      <p class="fleet-summary" id="attention-summary">Reading the wall&#8230;</p>
+      <div class="fleet-alerts" id="attention-chips" role="list" aria-label="Printers needing attention"></div>
+      <span class="draft-flag" id="draft-status" role="status" aria-label="Draft state" hidden>
+        Unsaved configuration draft</span>
     </div>
-    <div class="wall-mark"><span>07</span><div>PRINTERS<br>ONE CONTINUOUS TIDE</div></div>
+
+    <div class="installation" id="installation">
+      <div class="stage" id="stage" role="listbox" aria-label="Seven printers in physical left-to-right order. Use the arrow keys to move between them."
+           tabindex="0">
+        <canvas id="stage-canvas" width="1400" height="420" aria-hidden="true"></canvas>
+        <div class="stage-labels" id="stage-labels"></div>
+      </div>
+
+      <div class="fleet-rows" id="fleet-rows" role="listbox" aria-label="Seven printers in physical left-to-right order" tabindex="0"></div>
+
+      <article class="inspector" id="inspector" aria-live="polite" aria-label="Selected printer">
+        <div class="sheet-bar" id="sheet-bar">
+          <button id="sheet-back" type="button">&#8592; Back to fleet</button>
+          <span id="sheet-title"></span>
+        </div>
+        <figure class="photo" id="photo">
+          <div class="photo-frame" id="photo-frame">
+            <img id="photo-img" alt="" hidden>
+            <div class="photo-empty" id="photo-empty">
+              <b>Camera image</b>
+              <span id="photo-empty-text">Select a printer.</span>
+            </div>
+            <button class="photo-zoom" id="photo-zoom" type="button" hidden aria-label="View the camera image larger">Enlarge</button>
+          </div>
+          <figcaption id="photo-caption"></figcaption>
+        </figure>
+
+        <div class="inspector-body">
+          <div class="inspector-head">
+            <div>
+              <div class="inspector-kicker" id="insp-bay">Bay &middot;</div>
+              <h2 class="inspector-name" id="insp-name">&#8212;</h2>
+            </div>
+            <div class="inspector-state" id="insp-state"><span class="glyph"></span><span class="word">&#8212;</span></div>
+          </div>
+          <div class="inspector-progress" id="insp-progress"></div>
+          <p class="inspector-job" id="insp-job">&#8212;</p>
+          <p class="inspector-note" id="insp-note"></p>
+          <div class="inspector-actions" id="insp-actions">
+            <button id="insp-collect" class="primary" hidden>Mark collected</button>
+          </div>
+          <details class="inspector-tech" id="insp-tech">
+            <summary>Technical details</summary>
+            <dl id="insp-dl"></dl>
+            <div class="tech-actions">
+              <button id="insp-identify" class="secondary">Identify this rope for five seconds</button>
+              <a class="text-link" id="insp-log-link" href="/logs">Open this printer&#8217;s telemetry</a>
+            </div>
+          </details>
+        </div>
+      </article>
+    </div>
+
+    <p class="key" id="key">
+      <span>Light key:</span>
+      <span><i class="k printing"></i>Printing fills upward</span>
+      <span><i class="k collect"></i>Ready to collect</span>
+      <span><i class="k paused"></i>Paused breathes slowly</span>
+      <span><i class="k error"></i>Error breathes fast</span>
+      <span><i class="k idle"></i>Available rests</span>
+      <span><i class="k dark"></i>Bottom 30% stays dark</span>
+    </p>
   </section>
 
-  <nav aria-label="Studio view" role="tablist">
-    <button class="tab active" id="map-tab" role="tab" aria-controls="mapping"
-            aria-selected="true">01 <span>Map the wall</span></button>
-    <button class="tab" id="lab-tab" role="tab" aria-controls="lab"
-            aria-selected="false">02 <span>Animation lab</span></button>
-    <a class="page-link" href="/states">States &amp; animations</a>
-    <a class="page-link" href="/logs">Telemetry logs</a>
-    <div id="draft-status" role="status" aria-label="Draft state">Saved layout</div>
-  </nav>
-
-  <!-- ================================================== MAP THE WALL -->
-  <section id="mapping">
-    <div class="section-bar">
+  <!-- ===================================================== CONFIGURE -->
+  <section id="mapping" hidden aria-label="Configure the wall">
+    <div class="section-head">
       <div>
-        <h2>Your wall, left to right <span>&#8594;</span></h2>
-        <p id="map-hint">Each card is one physical bay. Swap which printer drives a rope,
-           or move a bay to match where it really hangs. Every rope shows
-           <strong>90 positions of printer state</strong> from the wire end, then a fixed
-           <strong>10-position cap</strong> at the far end that never shows state.</p>
+        <h2>Configure the wall</h2>
+        <p>One row per physical bay, left to right. Assignments, names, order, direction and caps are
+           a draft until you save; <strong>Identify</strong> and <strong>Walk the wall</strong> flash a
+           real rope immediately for five seconds.</p>
       </div>
-      <button id="walk" class="secondary">&#9678; Walk the wall</button>
+      <div class="section-actions">
+        <button id="walk" class="secondary">Walk the wall</button>
+        <button id="undo" class="secondary">Undo last save</button>
+      </div>
     </div>
 
-    <div id="walk-banner" role="region" aria-label="Wall walkthrough" hidden>
+    <div id="walk-banner" class="notice" role="region" aria-label="Wall walkthrough" hidden>
       <div>
         <strong id="walk-title"></strong>
         <p id="walk-copy"></p>
       </div>
       <div class="walk-actions">
-        <button id="walk-identify">Identify this rope</button>
-        <button id="walk-here" class="secondary">It&#8217;s here &#8594;</button>
+        <button id="walk-identify" class="primary">Identify this rope</button>
+        <button id="walk-here" class="secondary">It&#8217;s here</button>
         <button id="walk-next" class="secondary">Skip</button>
-        <button id="walk-close" class="subtle">Done</button>
+        <button id="walk-close" class="text">Done</button>
       </div>
     </div>
 
-    <div class="bays" id="bays" role="list"
-         aria-label="Printer bays in physical left-to-right order"></div>
-
-    <div class="legend">
-      <span><i class="idle"></i>Available &middot; resting, no motion</span>
-      <span><i class="preparing"></i>Preparing &middot; rising sweep</span>
-      <span><i class="printing"></i>Printing &middot; water rising through darker bands, rain</span>
-      <span><i class="paused"></i>Paused &middot; slow breath, steady end marks</span>
-      <span><i class="error"></i>Error &middot; deep fast breath</span>
-      <span><i class="finished"></i>Collect &middot; lightest, until the door opens</span>
-      <span><i class="stopped"></i>Stopped early &middot; dark and still, until the door opens</span>
-      <span><i class="offline"></i>Offline &middot; heartbeat</span>
-      <span><i class="unknown"></i>Unknown &middot; dashes</span>
-      <span><i class="cap"></i>Far-end cap &middot; always on, never state</span>
+    <div class="assign-table" role="table" aria-label="Rope assignments in physical left-to-right order">
+      <div class="assign-head" role="row">
+        <span role="columnheader">Bay</span>
+        <span role="columnheader">Printer</span>
+        <span role="columnheader">Driven by</span>
+        <span role="columnheader">Fill direction</span>
+        <span role="columnheader">Far-end cap</span>
+        <span role="columnheader">Rope</span>
+        <span role="columnheader">Move</span>
+      </div>
+      <div class="bays" id="bays" role="rowgroup"></div>
     </div>
-    <p class="micro zone-note">Progress is measured across the 90-position status
-       region only &mdash; the cap is not part of the percentage. Reversing a rope
-       changes the direction the status region fills; it never moves the cap, which
-       stays at the end opposite the wire.</p>
+
+    <details class="settings geometry-note">
+      <summary>How a rope is laid out (100 positions)</summary>
+      <div class="geometry-diagram" aria-label="Rope geometry">
+        <span class="g-foot">bottom 30 &middot; always dark</span>
+        <span class="g-active">60 active &middot; 0&ndash;100 % fills upward</span>
+        <span class="g-cap">cap 10</span>
+      </div>
+      <p>Physical position 0 is the data-in wire at the bottom. The bottom 30 positions are inactive
+         and always dark, the next 60 carry printer state (progress is measured across these 60 only),
+         and the last 10 are an always-on cap that never shows state. Reversing a rope changes the fill
+         direction inside positions 30&ndash;89 only; the dark foot and the cap never move.</p>
+    </details>
 
     <details class="settings">
       <summary>Start over</summary>
-      <p>Restoring the original configuration puts every printer back on the rope
-         listed in the service&#8217;s CAST_MAP, in printer-name order, with default
-         animation settings. Your current saved layout stays recoverable with Undo.</p>
+      <p>Restoring the original configuration puts every printer back on the rope listed in the
+         service&#8217;s CAST_MAP, in printer-name order, with default animation settings. The
+         current saved layout stays recoverable with Undo.</p>
       <button id="reset" class="secondary">Restore original assignments</button>
     </details>
   </section>
 
   <!-- ================================================= ANIMATION LAB -->
-  <section id="lab" hidden>
-    <div class="section-bar">
+  <section id="lab" hidden aria-label="Animation lab">
+    <div class="section-head">
       <div>
         <h2>Animation lab</h2>
-        <p>Simulated ropes. Set a different state per bay and watch the whole wall.
-           Nothing here reaches a printer or a light.</p>
+        <p id="lab-intro"><strong>Scenarios and per-bay states change only this preview</strong>, never the physical
+           wall. Theme, wall settings and caps become a draft that reaches the wall when you save.</p>
       </div>
-      <span class="pill">SIMULATION &middot; NOT THE WALL</span>
+      <span class="badge" id="lab-badge">Simulation</span>
     </div>
 
+    <div class="lab-context"><div><strong>Simulated printers · preview only</strong><p>Preparing, printing and errors below are sample states, not live printer status.</p><span class="lab-context-state" id="lab-context-state">Appearance uses saved settings</span></div><a href="#live">See real printer status →</a></div>
     <div class="lab-layout">
-      <div class="preview-stage">
-        <div class="stage-caption">
-          <span id="preview-label">MIXED WALL</span>
-          <span>SHARED CLOCK &middot; LEFT &#8594; RIGHT</span>
+      <div class="lab-main">
+        <div class="scenario-row">
+          <span class="label">Scenario</span>
+          <div id="scenarios" role="group" aria-label="Simulation scenarios"></div>
         </div>
-        <canvas id="lab-canvas" width="1240" height="470"
-                aria-label="Simulated animation of all seven LED ropes"></canvas>
-        <div class="stage-caption">
-          <span id="state-explainer">Choose a state per bay below.</span>
-          <span id="preview-rate">&mdash;</span>
+        <div class="preview-stage">
+          <div class="stage-caption">
+            <span id="preview-label">Busy afternoon</span>
+            <span id="preview-rate">&mdash;</span>
+          </div>
+          <canvas id="lab-canvas" width="1240" height="360" aria-label="Simulated animation of all seven LED ropes"></canvas>
+          <div class="lab-labels" id="lab-labels"></div>
         </div>
+        <p class="fineprint" id="state-explainer">Set a state per bay below; the preview follows immediately.</p>
+
       </div>
 
       <aside class="controls">
-        <div class="eyebrow">SCENARIOS</div>
-        <div id="scenarios"></div>
+        <div class="pending" id="lab-pending" role="status" hidden>
+          <div class="label">Pending for the wall</div>
+          <p id="lab-pending-text"></p>
+          <button id="lab-discard" class="text">Discard pending changes</button>
+        </div>
 
-        <div class="eyebrow">FAR-END CAPS &middot; ALL ROPES</div>
-        <p class="micro">The last ten positions of every rope, at the end opposite
-           the wire. Always on, never showing printer state. Per-rope settings
-           live on each bay card in Map the wall.</p>
-        <label class="range" for="cap-mode">Mode
-          <select id="cap-mode">
-            <option value="white">Pure white</option>
-            <option value="color">Solid colour</option>
-            <option value="rainbow">Hue sweep (theme)</option>
-          </select></label>
-        <label class="range" for="cap-color">Colour
-          <input id="cap-color" type="color" value="#ffffff"></label>
-        <label class="range" for="cap-brightness">Cap brightness
-          <output id="cap-brightness-out">100%</output>
-          <input id="cap-brightness" type="range" min="0" max="100" step="1" value="100"></label>
-        <button id="cap-apply" class="wide secondary">Apply to all ropes</button>
+        <details class="control-group" open>
+          <summary>Theme &amp; customization <span class="tag">draft until saved</span></summary>
+          <div id="look-controls"></div>
+        </details>
 
-        <div class="eyebrow cap-gap">COLOUR THEME &middot; PART OF YOUR DRAFT</div>
-        <div id="theme-picker" class="theme-picker" role="radiogroup" aria-label="Colour theme"></div>
-        <p class="micro" id="theme-blurb"></p>
+        <details class="control-group" open>
+          <summary>Wall settings <span class="tag">saved with the wall</span></summary>
+          <label class="range" for="brightness">Brightness <output id="brightness-out">65%</output>
+            <input id="brightness" type="range" min="0" max="100" step="1" value="65"></label>
+          <label class="range" for="speed">Flow speed <output id="speed-out">1&#215;</output>
+            <input id="speed" type="range" min="0.25" max="2" step="0.25" value="1"></label>
+          <label class="check"><input id="ripples" type="checkbox" checked> Ripples between printers</label>
+          <label class="check"><input id="reduced_motion" type="checkbox"> Reduced motion &middot; hold every rope still</label>
+          <label class="check"><input id="quiet" type="checkbox"> Quiet mode &middot; dim to 20% (alarms stay visible)</label>
+          <p class="fineprint">Brightness is a share of the wall&#8217;s fixed hardware ceiling, not a way past it.</p>
+        </details>
 
-        <div class="eyebrow cap-gap">WALL SETTINGS &middot; PART OF YOUR DRAFT</div>
-        <label class="range" for="brightness">Brightness <output id="brightness-out">65%</output>
-          <input id="brightness" type="range" min="0" max="100" step="1" value="65"></label>
-        <label class="range" for="speed">Flow speed <output id="speed-out">1&#215;</output>
-          <input id="speed" type="range" min="0.25" max="2" step="0.25" value="1"></label>
-        <label class="check"><input id="ripples" type="checkbox" checked>
-          Ripples between printers</label>
-        <label class="check"><input id="waterline_marks" type="checkbox" checked>
-          Quarter marks on the progress bar</label>
-        <label class="check"><input id="reduced_motion" type="checkbox">
-          Reduced motion &middot; hold every rope still</label>
-        <label class="check"><input id="quiet" type="checkbox">
-          Quiet mode &middot; dim to 20% (alarms stay visible)</label>
-        <p class="micro">Settings preview here instantly and reach the wall only when
-           you Save &amp; apply. Brightness is a share of the wall&#8217;s fixed hardware
-           ceiling, not a way past it.</p>
+        <details class="control-group">
+          <summary>Preview guides <span class="tag">screen only</span></summary>
+          <label class="check"><input id="waterline_marks" type="checkbox" checked>
+            Quarter guides beside the preview ropes (25 / 50 / 75 % of the active region)</label>
+          <p class="fineprint">Drawn in this browser only; the renderer sends nothing to the LEDs for
+             them. The choice is stored with the layout so every browser shows the same preview.</p>
+        </details>
+
+        <details class="control-group">
+          <summary>Far-end caps &middot; all ropes <span class="tag">saved with the wall</span></summary>
+          <p class="fineprint">The last ten positions of every rope, opposite the wire. Always on, never
+             printer state. Per-rope settings live on each row in Configure.</p>
+          <label class="range" for="cap-mode">Mode
+            <select id="cap-mode">
+              <option value="white">Pure white</option>
+              <option value="color">Solid colour</option>
+              <option value="rainbow">Hue sweep (theme)</option>
+            </select></label>
+          <label class="range" for="cap-color">Colour
+            <input id="cap-color" type="color" value="#ffffff"></label>
+          <label class="range" for="cap-brightness">Cap brightness
+            <output id="cap-brightness-out">100%</output>
+            <input id="cap-brightness" type="range" min="0" max="100" step="1" value="100"></label>
+          <button id="cap-apply" class="secondary wide">Apply to all ropes</button>
+        </details>
       </aside>
     </div>
-
     <div class="bay-sim" id="bay-sim"></div>
   </section>
 
   <!-- ================================================== SHARED SAVE BAR -->
-  <div class="savebar" id="savebar" role="region" aria-label="Draft actions">
+  <div class="savebar" id="savebar" role="region" aria-label="Draft actions" hidden>
     <div class="savebar-note">
-      <span class="tiny-dot"></span>
-      <span id="save-note">Identify flashes a real rope for five seconds, then restores it.</span>
+      <span class="dot"></span>
+      <span id="save-note"></span>
     </div>
     <div class="actions">
-      <button id="undo" class="subtle">Undo last save</button>
-      <button id="cancel" class="secondary" disabled>Discard draft</button>
-      <button id="save" disabled>Save &amp; apply</button>
+      <button id="cancel" class="secondary">Discard draft</button>
+      <button id="save" class="primary">Save &amp; apply to the wall</button>
     </div>
   </div>
-
-  <!-- ========================================================= ROADMAP -->
-  <section class="next">
-    <div>
-      <div class="eyebrow">WHAT THIS WALL DOES</div>
-      <h2>More than a<br><em>progress bar.</em></h2>
-      <p class="micro">Built now, and what it could grow into.</p>
-    </div>
-    <div>
-      <span>NOW / PLACE</span>
-      <h3>Find a rope without guessing</h3>
-      <p>Identify one rope for five seconds, swap assignments, reorder bays and
-         reverse a rope whose first pixel is at the wrong end.</p>
-    </div>
-    <div>
-      <span>NOW / NOTICE</span>
-      <h3>Quiet until it matters</h3>
-      <p>Pick a colour theme for the whole wall. Whatever the palette, the shapes stay the
-         same: a still resting colour when free, a waterline rising through darker bands while
-         printing with rain that streaks at Sport and Ludicrous speeds, a slow breath when
-         paused, a deep fast breath on error, and a smooth wash when a print really finishes.</p>
-    </div>
-    <div>
-      <span>NEXT / GROW</span>
-      <h3>Where it can go</h3>
-      <p>A cool-down indicator from existing bed temperature, pickup reminders,
-         and scheduled quiet hours. Rope acknowledgements are now read live.
-         See DESIGN.md for the full list.</p>
-    </div>
-  </section>
 </main>
 
-<footer>
-  <span>PRINT TIDE / EDI</span>
+<footer class="colophon">
+  <span>Filament wall</span>
   <span id="transport">Connecting&#8230;</span>
-  <span>Colour, motion and words. Always all three.</span>
+  <span>Identify flashes a real rope for five seconds, then restores it.</span>
 </footer>
+
+<dialog class="lightbox" id="lightbox" aria-label="Camera image, enlarged">
+  <button class="lightbox-close" id="lightbox-close" type="button" aria-label="Close (Escape)">Close</button>
+  <img id="lightbox-img" alt="">
+  <p class="lightbox-caption" id="lightbox-caption"></p>
+</dialog>
 
 <div id="toast" role="status" aria-live="polite"></div>
 </body>

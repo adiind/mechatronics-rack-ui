@@ -3,28 +3,38 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Print Tide · Telemetry log</title>
+  <title>Telemetry · Filament wall</title>
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/logs.css">
 </head>
 <body class="logs-page">
-  <header class="logs-head">
-    <div>
-      <div class="eyebrow">PRINT TIDE · WHAT THE PRINTERS SAY</div>
-      <h1>Telemetry log</h1>
-      <p class="micro">Every Bambu report that reaches the Pi, per printer, shown as
-         <em>what changed</em> since the report before it. This is the raw material
-         the wall is built from. Nothing here touches the lights.</p>
+  <header class="masthead">
+    <div class="masthead-brand">
+      <h1 class="product"><a href="/" aria-label="Filament wall home">Filament wall</a></h1>
     </div>
-    <nav class="logs-nav" aria-label="Pages">
-      <a href="/">Studio</a>
-      <a href="/states">States &amp; animations</a>
-      <a href="/logs" aria-current="page">Telemetry log</a>
+    <nav class="views" aria-label="Views">
+      <a class="tab" href="/">Live wall</a>
+      <a class="tab" href="/#map">Configure</a>
+      <a class="tab" href="/#lab">Animation lab</a>
+      <a class="tab" href="/states">States</a>
+      <a class="tab" href="/logs" aria-current="page">Telemetry</a>
     </nav>
+    <div class="connection"><b id="conn">Connecting&#8230;</b><span id="conn-sub">Read only &middot; nothing here touches the lights</span></div>
   </header>
 
+  <main>
+  <div class="section-head">
+    <div>
+      <h2>Telemetry</h2>
+      <p>What each printer actually reports, one row per <em>change</em>. Meaningful changes first
+         (state, progress, layer, error, speed, door); sensor ticking is folded unless you ask for it.
+         Every row opens to the full redacted report.</p>
+    </div>
+  </div>
+
   <section class="logs-controls" aria-label="Log controls">
-    <button id="pause" class="secondary">Pause</button>
+    <button id="pause" class="secondary" aria-pressed="false">Pause</button>
+    <span id="pause-note" class="fineprint" hidden></span>
     <label class="range" for="limit">Show last
       <select id="limit">
         <option value="20">20 changes</option>
@@ -32,27 +42,35 @@
         <option value="100">100 changes</option>
         <option value="200">200 changes</option>
       </select></label>
-    <label class="check"><input id="hide-ticks" type="checkbox">
-      Hide ticking (temperatures, fans, Wi-Fi)</label>
-    <label class="check"><input id="show-unknown" type="checkbox" checked>
-      Show fields the wall does not use yet</label>
-    <span id="conn" class="micro">connecting…</span>
+    <label class="check"><input id="hide-ticks" type="checkbox" checked>
+      Fold sensor ticking (temperatures, fans, Wi-Fi)</label>
+    <label class="check"><input id="show-unknown" type="checkbox">
+      Show every field, including ones the wall does not use</label>
   </section>
 
   <div class="logs-tabs" id="tabs" role="tablist" aria-label="Printers"></div>
 
-  <main id="feed" class="logs-feed" aria-live="polite"></main>
+  <div id="feed" class="logs-feed" aria-live="off">
+    <div class="empty" id="feed-loading">Loading the last reports from the Pi&#8230;</div>
+  </div>
 
-  <section class="logs-key">
-    <div class="eyebrow">HOW TO READ THIS</div>
-    <ul class="micro">
-      <li>One row per report whose content changed. Identical repeats are folded into the row as <b>×N</b>.</li>
-      <li><b>Bold</b> rows are meaningful to the wall: state, progress, layer, error, speed profile, door.</li>
-      <li>Dim <em>ticking</em> rows are sensor jitter: temperatures, fans, Wi-Fi. Hide them with the checkbox.</li>
-      <li>Each row ends with <b>wall →</b> the state Print Tide derives from that report and the animation it plays.</li>
-      <li>Click a row to see the full raw <code>print</code> payload of that report (serials, addresses and URLs are removed before it leaves the printer object).</li>
+  <details class="settings logs-key">
+    <summary>How to read this</summary>
+    <ul>
+      <li>One row per report whose content changed. Identical repeats are folded into the row as <b>&times;N</b>.</li>
+      <li><b>Bold</b> rows are meaningful to the wall: state, progress, layer, error, speed profile, door, job name, time left.</li>
+      <li>Dim <em>ticking</em> rows are sensor jitter: temperatures, fans, Wi-Fi. They are folded by default.</li>
+      <li>Each row ends with <b>wall &rarr;</b> the state the wall derives from the reports up to that one. It is historical: it never borrows the printer&#8217;s current state.</li>
+      <li><b>View raw report</b> on any row shows the full redacted report. Serials, addresses, access codes and private URLs are removed before it leaves the Pi.</li>
+      <li>The Pi keeps the last 400 reports per printer in memory; older history is not stored anywhere.</li>
     </ul>
-  </section>
+  </details>
+  </main>
+
+  <footer class="colophon">
+    <span>Filament wall</span>
+    <span id="history">history: connecting&#8230;</span>
+  </footer>
 
   <script src="/logs.js"></script>
 </body>

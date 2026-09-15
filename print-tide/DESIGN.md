@@ -16,17 +16,29 @@ is an order change. Reversing a rope is a per-rope flag. All three are
 independent, which is why a mismatch can be fixed in the browser instead of on a
 ladder.
 
-## Two zones, composed independently
+## Three zones, composed independently
 
-A rope is not one strip of meaning. It is a 90-position *status region* starting
-at the data-in wire, and a fixed 10-position *accent cap* at the far end.
+A rope is not one strip of meaning. Since 2026-09-14 it is a 30-position
+*inactive foot* at the data-in wire (the bottom of the rope on this wall,
+which Adi asked to have ignored), a 60-position *active region* above it, and
+a fixed 10-position *accent cap* at the far end.
+
+The foot is handled the same way as the cap: by construction rather than by
+convention. `render_rope` renders 60 positions and does not know the foot
+exists; `compose_rope` prepends 30 dark pixels and then runs `mask_inactive`
+over the finished frame as the last word, so even a wrong-length status list
+cannot light physical 0–29. Progress is remapped to the 60 (0/25/50/75/100 % =
+0/15/30/45/60) rather than blacked out of a 90-position bar, so the percentage
+still means what it says. The UI draws the foot as an unlit part of the object
+with an `OFF 30%` label, because a strip that appears to start a third of the
+way up would otherwise read as broken.
 
 The cap is a fixture, not a state indicator. That is why it is composed by a
 separate function (`render_accent`) with its own brightness, and joined to the
 status frame by `compose_rope` only at the very end. There is no code path by
 which a state, an event, a celebration, a ripple or Identify can write to
-physical 90-99, because nothing in the status layer even knows those positions
-exist — `render_rope` returns 90 pixels.
+physical 90-99 or 0-29, because nothing in the status layer even knows those
+positions exist — `render_rope` returns 60 pixels.
 
 This also settles the direction question cleanly. `reverse` is applied inside
 `compose_rope` to the status list alone, so the cap's physical location is
@@ -35,8 +47,9 @@ reversing the whole 100-position frame and then patching the cap back — would
 have worked but would have made "which end is the cap on?" a property of a
 boolean rather than of the geometry.
 
-Progress is recomputed over 90 positions rather than 100, so the percentage
-means what it says; the cap is not silently 10% of every bar.
+Progress is recomputed over the 60 active positions rather than 100, so the
+percentage means what it says; neither the foot nor the cap is silently part of
+every bar.
 
 ## Layering
 

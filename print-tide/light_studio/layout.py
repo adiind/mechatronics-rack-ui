@@ -22,7 +22,7 @@ import os
 from pathlib import Path
 
 from .model import number
-from .themes import DEFAULT_THEME, names as theme_names
+from .themes import DEFAULT_THEME, COLOUR_KEYS, names as theme_names
 
 #: 1 = original, 2 = added waterline_marks, 3 = added the per-rope accent cap.
 SCHEMA = 3
@@ -39,6 +39,8 @@ DEFAULTS = {
     'quiet': False,
     'waterline_marks': True,
     'theme': DEFAULT_THEME,
+    'palette_overrides': {},
+    'printing_motion': 'rain',
 }
 
 SETTING_RANGES = {'brightness': (0, 100), 'speed': (0.25, 2.0)}
@@ -125,17 +127,17 @@ def default_layout(initial):
             }
             for name in sorted(initial)
         ],
-        'settings': dict(DEFAULTS),
+        'settings': copy.deepcopy(DEFAULTS),
     }
 
 
 def merge_settings(settings):
     """Fill missing keys from defaults; used by the renderer and by validation."""
-    merged = dict(DEFAULTS)
+    merged = copy.deepcopy(DEFAULTS)
     if isinstance(settings, dict):
         for key, value in settings.items():
             if key in DEFAULTS:
-                merged[key] = value
+                merged[key] = copy.deepcopy(value)
     return merged
 
 
@@ -145,7 +147,7 @@ def validate_settings(settings):
     unknown = set(settings) - set(DEFAULTS)
     if unknown:
         raise ValueError('Unknown animation setting')
-    clean = dict(DEFAULTS)
+    clean = copy.deepcopy(DEFAULTS)
     for key, (low, high) in SETTING_RANGES.items():
         if key in settings:
             value = number(settings[key])
@@ -161,6 +163,19 @@ def validate_settings(settings):
         if settings['theme'] not in theme_names():
             raise ValueError('Unknown colour theme')
         clean['theme'] = settings['theme']
+    if 'palette_overrides' in settings:
+        overrides=settings['palette_overrides']
+        if not isinstance(overrides,dict) or set(overrides)-set(COLOUR_KEYS):
+            raise ValueError('Unknown custom colour')
+        clean['palette_overrides']={}
+        for key,value in overrides.items():
+            if not isinstance(value,(list,tuple)) or len(value)!=3 or any(type(v) is not int or not 0<=v<=255 for v in value):
+                raise ValueError('Custom colours need three integer channels, 0-255')
+            clean['palette_overrides'][key]=list(value)
+    if 'printing_motion' in settings:
+        if settings['printing_motion'] not in ('rain','flow','comet','still'):
+            raise ValueError('Unknown printing motion')
+        clean['printing_motion']=settings['printing_motion']
     return clean
 
 

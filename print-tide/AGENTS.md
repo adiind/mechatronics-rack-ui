@@ -8,21 +8,23 @@ in the existing host service and must never appear in output. Browser previews
 must remain free of hardware writes. Model assignments, error causes and
 physical bed clearance are not inferred.
 
-**Deployment status: PREVIEW ONLY.** The live host was rolled back to the
-original `server.py` on 2026-09-05 (see `LIVE_ROLLBACK_NOTICE.md`). Nothing in
-this directory drives the physical lights, port 8772 is closed, and a service
-restart activates nothing. Do not install or restart into this renderer without
-Adi approving the preview and a bounded physical trial that compares smoothness
-against the original renderer.
+**Deployment status: LIVE** (superseding the "PREVIEW ONLY" paragraph that
+stood here until 2026-09-14; that rollback note described 2026-09-05 22:45 and
+was overtaken the same night, see README). `printer-led-mcp.service` imports
+`light_studio` from this directory and serves the UI on port 8772. A service
+restart activates whatever is in `light_studio/`, so test before restarting and
+keep exactly one publisher.
 
 House rules for this project:
 
 - `renderer.py` is pure and is the *only* animation implementation. Do not add a
   JavaScript one; the browser plays server-rendered filmstrips.
-- A rope is two zones: 90 status positions from the data-in wire, then a fixed
-  10-position accent cap at physical 90-99. `render_rope` returns 90 pixels and
-  literally cannot address the cap; only `compose_rope` joins them. `reverse`
-  flips the status region alone and must never move the cap.
+- A rope is three zones: a dark 30-position foot at the data-in wire (physical
+  0-29, the bottom of the rope), 60 active positions (30-89), then a fixed
+  10-position accent cap at physical 90-99. `render_rope` returns 60 pixels and
+  literally cannot address the foot or the cap; only `compose_rope` joins them,
+  and it masks the foot again as the last step. `reverse` flips the active
+  region alone and must never move the foot or the cap.
 - New animation must be composed as slow-broad + narrow-fast so it stays inside
   the transport budget. `tests/test_renderer.py` enforces the run-count limits.
 - Anything that would let a restart, a reconnect or a retained `FINISH` produce a
@@ -68,3 +70,18 @@ House rules for this project:
   here; both bug fixes verified by reverting them and watching the new tests
   fail. Browser and hardware behaviour remain unverified by me. See
   CLAUDE_ACCENT_REPORT.md.
+- 2026-09-14: PM handoff 01 (pm-reviews/2026-09-14/). Implemented Adi's
+  "ignore the bottom 30%" as a real inactive foot in the shared compositor
+  (physical 0-29 dark, 60 active, cap unchanged; progress remapped; masked
+  after composition; view/film payloads carry `inactive_positions` and
+  `status_start`), then restructured the UI: Live wall as the default view
+  with an attention summary and slender rope cards, Configure for mapping and
+  caps, a fitted Animation lab with per-rope labels and a "Progress check"
+  scenario, a shared top bar across /, /states and /logs, states as "what you
+  see / what it means / what to do", and a telemetry page that defaults to
+  meaningful changes with a true Pause. Tests 312 -> 330+, all passing here;
+  browser behaviour checked with headless Firefox screenshots at 1440x900 and
+  narrow widths (recorded in the implementation report). Built on a worktree
+  branch; the live service was NOT restarted by me — the PM integrates. The
+  stale "PREVIEW ONLY" paragraph above was corrected in this pass. Details:
+  pm-reviews/2026-09-14/01-implementation-report.md.

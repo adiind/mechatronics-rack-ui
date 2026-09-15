@@ -25,7 +25,8 @@ from pathlib import Path
 from . import transport as tp
 from .layout import (Conflict, DEFAULTS, LayoutStore, atomic_write, merge_settings,
                      read_json, validate_accent, validate_settings)
-from .model import STALE_AFTER, STATES, normalize, number
+from .media import DECODER, FRESH_SECONDS, CameraCache
+from .model import RAW_STATES, SPEED_LEVELS, STALE_AFTER, STATES, normalize, number
 
 #: States whose bed still holds a part: collection (button or door) applies.
 COLLECTABLE = ('finished', 'stopped')
@@ -57,9 +58,9 @@ def redact_report(value):
         return [redact_report(item) for item in value]
     return value
 from .renderer import (ACCENT_POSITIONS, CELEBRATE_SECONDS, IDENTIFY_SECONDS,
-                       PIXELS, STATUS_POSITIONS, compose_rope, render_accent,
-                       render_rope)
-from .themes import describe as describe_themes
+                       INACTIVE_POSITIONS, PIXELS, STATUS_POSITIONS, compose_rope,
+                       mask_inactive, render_accent, render_rope)
+from .themes import describe as describe_themes, palette as resolve_palette
 
 #: Rope controllers this studio may ever address. node01 is the unrelated
 #: rack/wall pilot and is excluded by pattern, not by convention.
@@ -126,17 +127,27 @@ class Studio:
     """
 
     def __init__(self, root, initial, snapshots, publish, enabled,
-                 *, clock=time.time, demo=False, pixels=PIXELS, raw_reports=None):
+                 *, clock=time.time, demo=False, pixels=PIXELS, raw_reports=None,
+                 media_dir=None):
         self.lock = threading.RLock()
         # Optional: the host's recent raw (already redacted) MQTT reports per
         # printer, for the telemetry log page. Read-only; never influences lights.
         self.raw_reports = raw_reports if callable(raw_reports) else (lambda: {})
         self.initial = _check_initial(initial)
+        # Cached camera images, read-only, keyed by printer identity. The host
+        # integration does not pass a directory, so the dashboard's cache is
+        # the default; the demo and the tests hand in their own.
+        self.cameras = CameraCache(media_dir, aliases=self.initial, clock=clock)
         self.pixels = pixels
-        # Zone split is fixed for this wall: 90 status positions from the wire,
-        # then the 10-position accent cap at the far end.
+        # Zone split is fixed for this wall: a dark 30-position foot at the
+        # wire (bottom) end, 60 active positions, then the 10-position accent
+        # cap at the far end. Physical placement never follows ``reverse``.
         self.accent_positions = min(ACCENT_POSITIONS, pixels)
-        self.status_positions = pixels - self.accent_positions
+        self.inactive_positions = min(INACTIVE_POSITIONS, pixels - self.accent_positions)
+        self.status_start = self.inactive_positions
+        self.status_positions = pixels - self.accent_positions - self.inactive_positions
+        if self.status_positions < 1:
+            raise ValueError('A rope needs at least one active position')
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
         self.snapshots = snapshots
@@ -549,9 +560,11 @@ class Studio:
     def _compose(self, scene, position, t):
         """One *physical* rope frame at animation time ``t``.
 
-        Status region and accent cap are rendered independently and joined by
-        :func:`compose_rope`, so no state, event, celebration or Identify can
-        reach into physical positions 90-99. Pure with respect to ``scene``.
+        Active region and accent cap are rendered independently and joined by
+        :func:`compose_rope`, which also prepends the dark foot, so no state,
+        event, celebration or Identify can reach physical 0-29 or 90-99. The
+        foot mask is applied once more here as the last word before a frame can
+        reach the wire or a filmstrip. Pure with respect to ``scene``.
         """
         slot = scene['slots'][position]
         settings = scene['settings']
@@ -579,8 +592,9 @@ class Studio:
                             positions=self.accent_positions,
                             quiet=bool(settings.get('quiet')),
                             still=bool(settings.get('reduced_motion')),
-                            theme=settings.get('theme'))
-        return compose_rope(body, cap, slot['reverse'])
+                            theme=settings.get('theme'), overrides=settings.get('palette_overrides'))
+        frame = compose_rope(body, cap, slot['reverse'], self.inactive_positions)
+        return mask_inactive(frame, self.inactive_positions)
 
     def _render_all(self):
         scene = self._scene()
@@ -613,7 +627,8 @@ class Studio:
         for slot in order:
             node = slot['node']
             # Frames are already in physical order: _compose applied `reverse`
-            # to the status region only, and put the accent at 90-99.
+            # to the active region only, kept the foot dark at 0-29 and put the
+            # accent at 90-99.
             target = self.frames.get(node)
             if target is None:
                 continue
@@ -733,11 +748,14 @@ class Studio:
                 'phase': round(self.phase, 3),
                 'at': now,
                 'pixels': self.pixels,
+                'inactive_positions': self.inactive_positions,
+                'status_start': self.status_start,
                 'status_positions': self.status_positions,
                 'accent_positions': self.accent_positions,
-                'accent_start': self.status_positions,
+                'accent_start': self.status_start + self.status_positions,
                 'nodes': list(self.nodes),
                 'themes': describe_themes(),
+                'resolved_palette': resolve_palette(self.store.current['settings'].get('theme'), self.store.current['settings'].get('palette_overrides')),
                 'ropes': ropes,
                 'events': [{'kind': e['kind'], 'printer': e['printer'],
                             'position': e['position'], 'age': round(self.phase - e['at'], 2)}
@@ -767,9 +785,11 @@ class Studio:
         palette, encoded = tp.encode_film(ropes)
         return {'t0': round(start, 4), 'dt': round(step, 6), 'fps': fps,
                 'frames': frames, 'pixels': self.pixels,
+                'inactive_positions': self.inactive_positions,
+                'status_start': self.status_start,
                 'status_positions': self.status_positions,
                 'accent_positions': self.accent_positions,
-                'accent_start': self.status_positions,
+                'accent_start': self.status_start + self.status_positions,
                 'palette': palette, 'ropes': encoded}
 
     @staticmethod
@@ -872,8 +892,9 @@ class Studio:
                 cap = render_accent(caps[position], t, position,
                                     positions=self.accent_positions,
                                     quiet=opts['quiet'], still=opts['reduced_motion'],
-                                    theme=opts.get('theme'))
-                return compose_rope(body, cap, flips[position])
+                                    theme=opts.get('theme'), overrides=opts.get('palette_overrides'))
+                frame = compose_rope(body, cap, flips[position], self.inactive_positions)
+                return mask_inactive(frame, self.inactive_positions)
             specs.append(spec)
         film = self._film(specs, frames, fps, start)
         film['simulated'] = True
@@ -898,6 +919,17 @@ class Studio:
         :func:`redact_report` again here, so even a host that forgot to redact
         cannot leak a serial, address or URL to the browser. Read-only: nothing
         here touches the lights.
+
+        Each entry also carries ``wall``: the state the wall would derive *from
+        the reports up to that point* (``gcode_state`` and ``print_error``
+        carried forward within the buffer, ``spd_lvl`` likewise), with
+        ``basis`` ``'report'`` when this report itself stated the state,
+        ``'carried'`` when it came from an earlier report in the buffer, or
+        ``'unavailable'`` (state ``None``) when the buffer holds no state field
+        yet. This is a historical reading of the report fields only: it never
+        looks at the current status, and it does not claim freshness,
+        collection or door bookkeeping, which need context the buffer does not
+        hold.
         """
         try:
             limit = max(1, min(400, int(limit)))
@@ -925,6 +957,9 @@ class Studio:
             series = reports.get(name) or []
             entries = []
             prev = None
+            seen_state = None            # last gcode_state in the buffer so far
+            seen_error = None            # last print_error in the buffer so far
+            seen_speed = None            # last spd_lvl in the buffer so far
             for item in series:
                 try:
                     at, report = item
@@ -934,6 +969,28 @@ class Studio:
                 if not isinstance(report, dict):
                     continue
                 report = redact_report(report)
+                stated = isinstance(report.get('gcode_state'), str) and report['gcode_state'].strip()
+                if stated:
+                    seen_state = report['gcode_state'].strip().upper()
+                if 'print_error' in report:
+                    seen_error = number(report.get('print_error'))
+                    if seen_error is None and report.get('print_error') in (None, ''):
+                        seen_error = 0.0
+                if 'spd_lvl' in report:
+                    seen_speed = report.get('spd_lvl')
+                if seen_error:
+                    derived, basis = 'error', ('report' if 'print_error' in report else 'carried')
+                elif seen_state is None:
+                    derived, basis = None, 'unavailable'
+                else:
+                    derived = RAW_STATES.get(seen_state, 'unknown')
+                    basis = 'report' if stated else 'carried'
+                speed_level = seen_speed
+                if type(speed_level) is not int or type(speed_level) is bool:
+                    level = number(speed_level)
+                    speed_level = int(level) if level is not None and level == int(level) else None
+                wall = {'state': derived, 'basis': basis,
+                        'speed': SPEED_LEVELS.get(speed_level) if speed_level is not None else None}
                 if prev is None:
                     changed = {key: [None, value] for key, value in sorted(report.items())}
                 else:
@@ -950,7 +1007,7 @@ class Studio:
                     continue
                 entry = {'at': round(at, 3), 'last_at': round(at, 3),
                          'first': first, 'changed': changed, 'keys': len(report),
-                         'repeats': 0}
+                         'repeats': 0, 'wall': wall}
                 if raw:
                     entry['raw'] = report
                 entries.append(entry)
@@ -964,7 +1021,39 @@ class Studio:
                 'reports_kept': len(series),
                 'entries': entries[-limit:],
             })
-        return {'at': now, 'printers': out}
+        return {'at': now, 'demo': self.demo, 'printers': out}
+
+    # ----------------------------------------------------------- camera media
+
+    def media(self):
+        """Truthful descriptions of the cached camera image per printer.
+
+        Keyed by printer identity and carrying the bay position only as a
+        convenience: a reassigned rope keeps showing its own printer's image.
+        """
+        with self.lock:
+            slots = copy.deepcopy(self.store.current['slots'])
+            now = self.clock()
+        out = {}
+        described = self.cameras.describe_all([slot['printer'] for slot in slots], now=now)
+        for position, slot in enumerate(slots):
+            row = dict(described[slot['printer']])
+            row.update({'label': slot['label'], 'node': slot['node'], 'position': position,
+                        'url': f"/media/camera/{slot['printer']}.jpg" if row['available'] else None,
+                        # No thumbnail source exists on this Pi: MQTT reports carry
+                        # none and the dashboard caches none. Said plainly.
+                        'model_preview': None})
+            out[slot['printer']] = row
+        return {'at': now, 'fresh_seconds': FRESH_SECONDS, 'server_decode_check': DECODER,
+                'printers': out}
+
+    def camera_image(self, alias):
+        """Bytes of one cached image; raises LookupError / ValueError (see media.py)."""
+        with self.lock:
+            printers = {slot['printer'] for slot in self.store.current['slots']}
+        if alias not in printers:
+            raise LookupError('Unknown printer')
+        return self.cameras.image(alias)
 
     def preview(self, state, percent, t, settings=None):
         """Legacy single-state preview: one frame per bay. Read-only."""

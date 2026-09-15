@@ -5,23 +5,29 @@ writer, the live browser filmstrip and the animation lab all call it. There is
 deliberately no second animation implementation in JavaScript, so what the
 browser plays is what the wall was asked to show.
 
-Two zones per rope
-------------------
-A rope is 100 *addressable positions* (WS2811 modules), not 100 dies::
+Three zones per rope
+--------------------
+A rope is 100 *addressable positions* (WS2811 modules), not 100 dies. Physical
+index 0 is the data-in wire, which on this wall hangs at the *bottom*::
 
-    physical 0 .......................... 89 | 90 ............ 99
-    ^ data-in wire                           |                 ^ far end
-    <------------ status region (90) ------->|<-- accent (10) ->
+    physical 0 ........ 29 | 30 ...................... 89 | 90 ........ 99
+    ^ data-in wire (bottom)|                              |     far end ^
+    <-- inactive foot (30)-><----- active region (60) ---->|<- accent (10)>
 
-* The **status region** carries all printer state and animation. Progress maps
-  to these 90 positions alone: 0/50/100% is 0/45/90 of them. The cap is not part
-  of the percentage.
+* The **inactive foot** (Adi, 2026-09-14: "ignore the bottom 30% of every
+  strip; loading starts above that point") is always dark. No state, drop,
+  splash, marker, ripple, celebration or Identify may light it. It is masked
+  again after composition as a final invariant, not merely left unpainted.
+* The **active region** carries all printer state and animation. Progress maps
+  to these 60 positions alone: 0/25/50/75/100% is 0/15/30/45/60 of them. Neither
+  the foot nor the cap is part of the percentage.
 * The **accent** is a fixed fixture at the far end, opposite the wire: solid
   white by default, or a chosen colour, or a slow rainbow. Nothing in the status
   layer may write to it -- not events, not ripples, not errors, not Identify.
 
-``reverse`` flips the direction of the *status region only*. The accent's
-physical location is defined relative to the wire and never moves.
+``reverse`` flips the direction of the *active region only*, inside physical
+30-89. The foot stays at the wire end and the accent at the far end whatever the
+direction: both are defined relative to the wire, not to the way the bar fills.
 
 Transport-aware composition
 ---------------------------
@@ -49,9 +55,14 @@ from .themes import DEFAULT_THEME, palette
 #: Addressable positions on one rope, and how they are split between the zones.
 PIXELS = 100
 ACCENT_POSITIONS = 10
-STATUS_POSITIONS = PIXELS - ACCENT_POSITIONS
+#: Physically inactive positions at the wire (bottom) end: always dark.
+INACTIVE_POSITIONS = 30
+#: First physical index that may show printer state.
+STATUS_START = INACTIVE_POSITIONS
+STATUS_POSITIONS = PIXELS - ACCENT_POSITIONS - INACTIVE_POSITIONS
 #: First physical index of the accent cap, counting from the data-in wire.
-ACCENT_START = STATUS_POSITIONS
+ACCENT_START = STATUS_START + STATUS_POSITIONS
+assert (INACTIVE_POSITIONS, STATUS_POSITIONS, ACCENT_START) == (30, 60, 90)
 
 #: Effective wall brightness: the highest value any channel is driven to,
 #: out of 255. 252 is the largest multiple of QUANT, i.e. effectively full
@@ -217,8 +228,9 @@ def droplet_timing(travel, speed=DROP_SPEED, tempo=1.0):
 
     The cycle must always outlast the fall plus the splash. A fixed two-second
     cycle looked fine at high progress and silently broke at low progress: with
-    a 90-position region an empty bucket needs ~3 s of falling, so the droplet
-    used to reset in mid-air and never land. ``tempo`` shortens the gap between
+    the old 90-position region an empty bucket needed ~3 s of falling (about
+    2 s across today's 60), so the droplet used to reset in mid-air and never
+    land. ``tempo`` shortens the gap between
     drops for the faster speed profiles (gently: the trail already costs a run).
     """
     fall = max(0.0, travel) / speed
@@ -249,7 +261,7 @@ def _shades(pix, fill, P):
         pix[i] = shade(band, P)
 
 
-def _printing(n, T, percent, marks, P, still=False, speed=None):
+def _printing(n, T, percent, marks, P, still=False, speed=None, motion="rain"):
     """The original 'bucket filling with rain', reproduced.
 
     Behavioural reference is ``NodeAnimator`` in reference/server.py: the
@@ -271,6 +283,8 @@ def _printing(n, T, percent, marks, P, still=False, speed=None):
     wider (SPLASH_WIDTH); nothing about progress or colour changes.
     """
     tempo = SPEED_TEMPO.get(speed, 1.0)
+    if motion == 'still':
+        T = 0.0
     if percent is None:
         pix = [_scale(P['water'], 0.28) for _ in range(n)]
         span = n + 30
@@ -281,6 +295,18 @@ def _printing(n, T, percent, marks, P, still=False, speed=None):
     fill = max(0, min(n, int(round(percent / 100.0 * n))))
     pix = [P['water'] for _ in range(n)]
     _shades(pix, fill, P)
+
+    if motion != 'rain':
+        if not still and fill and motion == 'flow':
+            # Uniform breathing glow costs one changing run, never extends fill.
+            colour = _mix(P['water'], P['splash'], .08 + .12*(.5+.5*math.sin(T*1.3)))
+            pix[:fill] = [colour] * fill
+        elif not still and fill and motion == 'comet':
+            # One bounded highlight block travels entirely inside real progress.
+            width = min(3,fill)
+            start = int(T*4*tempo) % max(1,fill-width+1)
+            _block(pix,start,width,_mix(P['water'],P['splash'],.45))
+        return pix
 
     # One drop per cycle, falling from the top down into the water. It and its
     # tail are only drawn above the waterline, so they never eat into the water.
@@ -402,7 +428,7 @@ SCENES = {
     'idle': lambda n, T, wall, ctx: _idle(n, T, wall, ctx['P']),
     'preparing': lambda n, T, wall, ctx: _preparing(n, T, wall, ctx['P']),
     'printing': lambda n, T, wall, ctx: _printing(n, T, ctx['percent'], ctx['marks'],
-                                                 ctx['P'], ctx['still'], ctx['speed']),
+                                                 ctx['P'], ctx['still'], ctx['speed'], ctx['motion']),
     'paused': lambda n, T, wall, ctx: _paused(n, T, ctx['P']),
     'error': lambda n, T, wall, ctx: _error(n, T, ctx['P']),
     'finished': lambda n, T, wall, ctx: _finished(n, T, ctx['since_complete'], ctx['P']),
@@ -425,7 +451,7 @@ def _chroma_distance(a, b):
     return sum((x - y) ** 2 for x, y in zip(ca, cb))
 
 
-def is_water(pixel, theme=None):
+def is_water(pixel, theme=None, overrides=None):
     """True for a pixel of the printed water of ``theme``, false for the bands,
     the drop and the splash. (The tail fades into the bands and is only ever
     drawn above the waterline, so it is not a candidate here.)
@@ -435,7 +461,7 @@ def is_water(pixel, theme=None):
     """
     if not any(pixel):
         return False
-    P = palette(theme)
+    P = palette(theme, overrides)
     others = (P['rest'], P['deep'], P['drop'], P['splash'])
     to_water = _chroma_distance(pixel, P['water'])
     return all(to_water < _chroma_distance(pixel, other) for other in others)
@@ -460,24 +486,24 @@ def is_pink(pixel):
             and g <= r * PINK_MAX_GREEN and b >= r * PINK_MIN_BLUE)
 
 
-def _water_span(pix, theme):
+def _water_span(pix, theme, overrides=None):
     """Length of the leading water run of a frame."""
     span = 0
     for pixel in pix:
-        if not is_water(pixel, theme):
+        if not is_water(pixel, theme, overrides):
             break
         span += 1
     return span
 
 
-def _apply_ripples(pix, events, t, position, state, theme=None):
+def _apply_ripples(pix, events, t, position, state, theme=None, overrides=None, filled=None):
     """One brief spatial pulse per genuine event, delayed by physical distance.
 
     Blended, never substituted: the printing waterline and the filled/remaining
     contrast survive a ripple passing through.
     """
     n = len(pix)
-    P = palette(theme)
+    P = palette(theme, overrides)
     strength_cap = 0.30 if state == 'printing' else 0.34
     for event in events:
         delay = abs(position - event.get('position', 0)) * RIPPLE_DELAY
@@ -494,7 +520,7 @@ def _apply_ripples(pix, events, t, position, state, theme=None):
             # On a printing rope only the water takes the tint: re-tinting
             # every band as well would change SHADE_BANDS+1 runs per tick for
             # the whole ripple and tear the rope under the budget.
-            span = _water_span(pix, theme) if state == 'printing' else n
+            span = (filled if filled is not None else _water_span(pix, theme, overrides)) if state == 'printing' else n
             for i in range(span):
                 pix[i] = _mix(pix[i], tint, k)
 
@@ -529,14 +555,15 @@ def _finalize(pix, opts, state):
 def render_rope(state, percent=None, t=0.0, position=0, settings=None, events=(),
                 *, pixels=STATUS_POSITIONS, since_complete=None, identify_age=None,
                 speed=None, theme=None):
-    """Render the *status region* as ``pixels`` ``[r, g, b]`` rows.
+    """Render the *active region* as ``pixels`` ``[r, g, b]`` rows.
 
     ``speed`` is the printer's speed profile ('silent', 'standard', 'sport',
     'ludicrous' or None) and only changes the rain: tempo, tail and splash.
     ``theme`` names the colour theme; it defaults to the ``theme`` setting.
 
-    This is the 90-position zone only; the accent cap is composed separately by
-    :func:`compose_rope`. Progress therefore maps to these positions alone.
+    This is the 60-position active zone only; the dark foot and the accent cap
+    are composed around it by :func:`compose_rope`. Progress therefore maps to
+    these positions alone: index 0 here is physical ``STATUS_START``.
 
     Pure: identical arguments always give an identical frame, which is what lets
     the browser play a filmstrip of future frames and still match the wall.
@@ -548,7 +575,7 @@ def render_rope(state, percent=None, t=0.0, position=0, settings=None, events=()
         raise ValueError('A rope needs at least one pixel')
     opts = merge_settings(settings)
     theme = theme if isinstance(theme, str) else opts.get('theme')
-    P = palette(theme)
+    P = palette(theme, opts['palette_overrides'])
 
     if identify_age is not None:
         if not 0.0 <= identify_age < IDENTIFY_SECONDS:
@@ -564,11 +591,12 @@ def render_rope(state, percent=None, t=0.0, position=0, settings=None, events=()
         'since_complete': None if still else since_complete,
         'still': still,
         'speed': speed,
+        'motion': opts['printing_motion'],
         'P': P,
     }
     pix = SCENES[state](n, T, wall, ctx)
-    if opts['ripples'] and not still and state in RIPPLE_STATES and events:
-        _apply_ripples(pix, events, t, position, state, theme)
+    if opts['ripples'] and not still and state in RIPPLE_STATES and events and not (state == 'printing' and opts['printing_motion'] == 'still'):
+        _apply_ripples(pix, events, t, position, state, theme, opts['palette_overrides'], (max(0,min(n,round(percent/100*n))) if percent is not None else 0) if opts['palette_overrides'] or opts['printing_motion'] != 'rain' else None)
     return _finalize(pix, opts, state)
 
 
@@ -638,7 +666,7 @@ def _finalize_accent(pix, level):
 
 
 def render_accent(accent=None, t=0.0, position=0, *, positions=ACCENT_POSITIONS,
-                  quiet=False, still=False, theme=None):
+                  quiet=False, still=False, theme=None, overrides=None):
     """Render the fixed far-end cap. Never depends on printer state.
 
     ``still`` (reduced motion) freezes the rainbow; white and colour caps are
@@ -657,7 +685,7 @@ def render_accent(accent=None, t=0.0, position=0, *, positions=ACCENT_POSITIONS,
         turns = 0.0 if still else t / RAINBOW_PERIOD
         hue = turns + position / 7.0
         hue = math.floor(hue * RAINBOW_STEPS) / RAINBOW_STEPS
-        base = _sweep_rgb(hue, palette(theme))
+        base = _sweep_rgb(hue, palette(theme, overrides))
     elif mode == 'color':
         base = tuple(float(c) for c in cfg['color'])
     else:
@@ -665,13 +693,31 @@ def render_accent(accent=None, t=0.0, position=0, *, positions=ACCENT_POSITIONS,
     return _finalize_accent([base] * int(positions), level)
 
 
-def compose_rope(status, accent, reverse=False):
-    """Join the two zones into one physical frame.
+def mask_inactive(frame, inactive=INACTIVE_POSITIONS):
+    """Force the inactive foot dark. The final invariant on every frame.
 
-    ``status`` is in *logical* order (index 0 = where progress starts).
-    ``reverse`` flips it inside its own 90 positions; the accent is appended at
-    physical 90-99 either way, because its location is fixed relative to the
-    wire, not to the direction the bar happens to fill.
+    Applied after all composition so that nothing -- not a scene, an effect, a
+    ripple, a celebration, Identify or a future bug in any of them -- can light
+    physical ``0 .. inactive-1``. Mutates and returns ``frame``.
+    """
+    for i in range(min(max(0, int(inactive)), len(frame))):
+        frame[i] = [0, 0, 0]
+    return frame
+
+
+def compose_rope(status, accent, reverse=False, inactive=INACTIVE_POSITIONS):
+    """Join the three zones into one physical frame.
+
+    ``status`` is the active region in *logical* order (index 0 = where
+    progress starts). ``reverse`` flips it inside its own positions only. The
+    dark foot is prepended at physical ``0 .. inactive-1`` and the accent
+    appended after the active region either way, because both locations are
+    fixed relative to the wire, not to the direction the bar happens to fill.
+    The foot is masked again at the end as the invariant, so even a ``status``
+    list that is too long cannot spill light into it.
     """
     body = list(reversed(status)) if reverse else list(status)
-    return [list(pixel) for pixel in body] + [list(pixel) for pixel in accent]
+    frame = ([[0, 0, 0] for _ in range(max(0, int(inactive)))]
+             + [list(pixel) for pixel in body]
+             + [list(pixel) for pixel in accent])
+    return mask_inactive(frame, inactive)

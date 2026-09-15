@@ -11,8 +11,8 @@ from pathlib import Path
 
 from light_studio import transport as tp
 from light_studio.layout import Conflict
-from light_studio.renderer import (ACCENT_POSITIONS, IDENTIFY_SECONDS,
-                                   STATUS_POSITIONS)
+from light_studio.renderer import (ACCENT_POSITIONS, ACCENT_START, IDENTIFY_SECONDS,
+                                   STATUS_POSITIONS, STATUS_START)
 from light_studio.studio import RESYNC_SECONDS, Studio
 from test_core import MAP, NOW
 
@@ -536,7 +536,8 @@ class TransportTests(Harness):
         self.studio.save(config)
         self.tick(count=60)
         forward = list(self.studio.applied['node02'])
-        status_a, cap_a = forward[:STATUS_POSITIONS], forward[STATUS_POSITIONS:]
+        foot_a = forward[:STATUS_START]
+        status_a, cap_a = forward[STATUS_START:ACCENT_START], forward[ACCENT_START:]
         self.assertNotEqual(status_a[0], status_a[STATUS_POSITIONS - 1])
 
         config = self.studio.config()
@@ -544,11 +545,15 @@ class TransportTests(Harness):
         self.studio.save(config)
         self.tick(count=60)
         flipped = list(self.studio.applied['node02'])
-        status_b, cap_b = flipped[:STATUS_POSITIONS], flipped[STATUS_POSITIONS:]
+        foot_b = flipped[:STATUS_START]
+        status_b, cap_b = flipped[STATUS_START:ACCENT_START], flipped[ACCENT_START:]
 
         self.assertEqual(status_b, list(reversed(status_a)))
         self.assertEqual(cap_b, cap_a, 'the accent moved when direction flipped')
         self.assertEqual(len(cap_b), ACCENT_POSITIONS)
+        # The dark foot never follows the direction either.
+        self.assertEqual(foot_a, [[0, 0, 0]] * STATUS_START)
+        self.assertEqual(foot_b, [[0, 0, 0]] * STATUS_START)
 
 
 class MappingTests(Harness):

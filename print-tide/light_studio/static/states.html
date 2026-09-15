@@ -3,67 +3,99 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Print Tide · States &amp; animations</title>
+<title>States · Filament wall</title>
+<link rel="stylesheet" href="/style.css">
 <link rel="stylesheet" href="/states.css">
 </head>
-<body>
-<header>
-  <h1>States &amp; animations</h1>
-  <nav><a href="/">Studio</a><a href="/logs">Telemetry logs</a></nav>
-  <span class="spacer"></span>
-  <span class="status" id="status">Connecting…</span>
+<body class="states-page">
+<header class="masthead">
+  <div class="masthead-brand">
+    <h1 class="product"><a href="/" aria-label="Filament wall home">Filament wall</a></h1>
+  </div>
+  <nav class="views" aria-label="Views">
+    <a class="tab" href="/">Live wall</a>
+    <a class="tab" href="/#map">Configure</a>
+    <a class="tab" href="/#lab">Animation lab</a>
+    <a class="tab" href="/states" aria-current="page">States</a>
+    <a class="tab" href="/logs">Telemetry</a>
+  </nav>
+  <div class="connection"><b id="status">Connecting&#8230;</b><span>Reference &middot; read only</span></div>
 </header>
 
-<p class="intro">Every state a rope can be in, what the printer has to say to get it there,
-what the animation does and what ends it. The previews come from the same renderer that drives
-the wall, so what you see here is what the LEDs are asked to show. Pick a theme to see the same
-shapes in different colours; this page never changes the wall.</p>
-
-<div class="controls">
-  <label>Theme <select id="theme"></select></label>
-  <label>Brightness <input id="brightness" type="range" min="5" max="100" step="5" value="100"> <output id="brightness-out">100%</output></label>
-  <label><input id="still" type="checkbox"> Hold still (reduced motion)</label>
+<main>
+<div class="section-head">
+  <div>
+    <h2>What the lights mean</h2>
+    <p>Every state a rope can show, what it means and what to do about it. The strips are rendered
+       by the same code that drives the wall; <strong>this page never changes the wall</strong>.</p>
+  </div>
 </div>
 
-<div class="eyebrow">Live wall · right now</div>
-<section class="live" id="live"></section>
-<p class="micro" style="padding:0 22px">Real frames from the wall, with each bay's state and Bambu speed profile. Sport and Ludicrous bays show the comet tail behind the drop.</p>
+<div class="toolbar">
+  <div class="scale" aria-label="Rope geometry">
+    <span class="foot" id="scale-foot" data-short="30 dark">bottom 30 &middot; always dark</span>
+    <span class="active" id="scale-active" data-short="60 active">60 active &middot; 0&ndash;100 % fills 0&ndash;60</span>
+    <span class="cap" id="scale-cap" data-short="cap 10">cap 10</span>
+  </div>
+  <div class="controls">
+    <label>Theme <select id="theme"></select></label>
+    <label>Brightness <input id="brightness" type="range" min="5" max="100" step="5" value="100"> <output id="brightness-out">100%</output></label>
+    <label><input id="still" type="checkbox"> Hold still</label>
+  </div>
+</div>
+<p class="fineprint geometry-line">Strips read from the <b>wire on the left</b> to the <b>far end on the right</b>; on the
+wall the wire is at the bottom. Reversing a rope flips the active region only; the dark foot and the
+cap stay where they are.</p>
 
-<div class="eyebrow">Every state</div>
+<div class="label section-label">Every state</div>
 <section><div class="grid" id="cards"></div></section>
 
-<div class="eyebrow">How a Bambu report becomes a state</div>
+<div class="label section-label">How a printer report becomes a state</div>
 <section>
+<div class="table-wrap">
 <table>
   <thead><tr><th>Printer says</th><th>Wall state</th><th>Notes</th></tr></thead>
   <tbody id="mapping"></tbody>
 </table>
+</div>
 </section>
 
-<div class="eyebrow">Speed profiles · the rain</div>
+<div class="label section-label">Speed profiles &middot; the rain</div>
 <section>
+<div class="table-wrap">
 <table>
   <thead><tr><th>Bambu profile</th><th><code>spd_lvl</code> / <code>spd_mag</code></th><th>Rain tempo</th><th>Comet tail</th><th>Splash</th></tr></thead>
   <tbody>
-    <tr><td>Silent</td><td>1 / 50%</td><td>0.7× (drizzle, longer gaps)</td><td>none</td><td>1 position</td></tr>
-    <tr><td>Standard</td><td>2 / 100%</td><td>1× (reference)</td><td>none</td><td>2 positions</td></tr>
-    <tr><td>Sport</td><td>3 / 124%</td><td>1.35×</td><td>3 positions</td><td>3 positions</td></tr>
-    <tr><td>Ludicrous</td><td>4 / 166%</td><td>1.8×</td><td>6 positions</td><td>4 positions</td></tr>
+    <tr><td>Silent</td><td>1 / 50%</td><td>0.7&times; (drizzle, longer gaps)</td><td>none</td><td>1 position</td></tr>
+    <tr><td>Standard</td><td>2 / 100%</td><td>1&times; (reference)</td><td>none</td><td>2 positions</td></tr>
+    <tr><td>Sport</td><td>3 / 124%</td><td>1.35&times;</td><td>3 positions</td><td>3 positions</td></tr>
+    <tr><td>Ludicrous</td><td>4 / 166%</td><td>1.8&times;</td><td>6 positions</td><td>4 positions</td></tr>
   </tbody>
 </table>
-<p class="micro">Speed only changes the rain. Progress, bands and colours are the same at every profile, so a bay is always readable.</p>
+</div>
+<p class="fineprint">These profiles describe Rain motion. Other printing motions keep the same reported progress; Still holds the progress display steady.</p>
 </section>
 
-<div class="eyebrow">Palette of the selected theme</div>
+<div class="label section-label">Palette of the selected theme</div>
 <section><div class="swatches" id="palette"></div>
-<p class="micro">Every colour any state can produce comes from these keys. Change the theme in the Studio's Animation lab and Save &amp; apply to recolour the wall.</p></section>
+<p class="fineprint">Every colour any state can produce comes from these keys. Change the theme in the
+Animation lab and save to recolour the wall.</p></section>
 
-<footer>
-Each rope is 100 positions: 90 for state, the last 10 an always-on accent cap. The controller
-takes about 24 messages per second per rope, so every animation is built as a still base plus a
-few narrow moving parts; a full-strip gradient would tear. Previews are amplified for the screen
-and are not a photometric match to the LEDs.
+<details class="settings live-compare" id="live-compare">
+  <summary id="live-summary">Compare with the wall right now</summary>
+  <p class="fineprint" id="live-caption">Frames from the wall, in physical order, with each bay&#8217;s state and speed profile.
+     Select a name to open that printer on the Live wall.</p>
+  <section class="live" id="live"></section>
+</details>
+</main>
+
+<footer class="colophon">
+<span>Filament wall</span>
+<span>Each rope is 100 positions: the bottom 30 are inactive and always dark, the next 60 carry
+state, the last 10 are an always-on cap. Previews are amplified for the screen and are not a
+photometric match to the LEDs.</span>
 </footer>
+<script src="/customization.js"></script>
 <script src="/states.js"></script>
 </body>
 </html>

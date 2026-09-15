@@ -2,7 +2,8 @@
 
 The cap is a *fixture*: it sits at physical 90-99, the end opposite the data-in
 wire, and nothing about printer state may ever reach it. These tests exist to
-keep it that way.
+keep it that way. Since 2026-09-14 the active region is physical 30-89: the
+bottom 30 positions are a dark foot (see test_inactive_foot.py).
 """
 import copy
 import json
@@ -13,10 +14,11 @@ from pathlib import Path
 from light_studio.layout import (DEFAULT_ACCENT, LayoutStore, SCHEMA,
                                  default_layout, validate, validate_accent)
 from light_studio.model import STATES
-from light_studio.renderer import (ACCENT_POSITIONS, ACCENT_QUIET_SCALE, BRIGHT_CAP, is_water,
+from light_studio.renderer import (ACCENT_POSITIONS, ACCENT_QUIET_SCALE, ACCENT_START,
+                                   BRIGHT_CAP, INACTIVE_POSITIONS, is_water,
                                    PIXELS, QUANT, RAINBOW_PERIOD, RAINBOW_STEPS,
-                                   STATUS_POSITIONS, compose_rope, render_accent,
-                                   render_rope)
+                                   STATUS_POSITIONS, STATUS_START, compose_rope,
+                                   render_accent, render_rope)
 from light_studio.studio import RESYNC_SECONDS, Studio
 from test_core import MAP, NOW
 from test_studio import Harness, fleet
@@ -27,10 +29,13 @@ RAINBOW = {'mode': 'rainbow', 'color': [255, 255, 255], 'brightness': 100}
 
 
 class GeometryTests(unittest.TestCase):
-    def test_the_wall_splits_into_ninety_status_and_ten_accent(self):
+    def test_the_wall_splits_into_foot_active_and_accent(self):
         self.assertEqual(ACCENT_POSITIONS, 10)
-        self.assertEqual(STATUS_POSITIONS, 90)
-        self.assertEqual(STATUS_POSITIONS + ACCENT_POSITIONS, PIXELS)
+        self.assertEqual(INACTIVE_POSITIONS, 30)
+        self.assertEqual(STATUS_POSITIONS, 60)
+        self.assertEqual(STATUS_START, 30)
+        self.assertEqual(ACCENT_START, 90)
+        self.assertEqual(INACTIVE_POSITIONS + STATUS_POSITIONS + ACCENT_POSITIONS, PIXELS)
 
     def test_compose_puts_the_cap_at_the_far_end_both_directions(self):
         status = [[1, 2, 3]] * (STATUS_POSITIONS - 1) + [[9, 9, 9]]
@@ -38,16 +43,18 @@ class GeometryTests(unittest.TestCase):
         forward = compose_rope(status, cap, reverse=False)
         backward = compose_rope(status, cap, reverse=True)
         self.assertEqual(len(forward), PIXELS)
-        self.assertEqual(forward[STATUS_POSITIONS:], cap)
-        self.assertEqual(backward[STATUS_POSITIONS:], cap)
-        # Only the status region flipped.
-        self.assertEqual(backward[:STATUS_POSITIONS],
-                         list(reversed(forward[:STATUS_POSITIONS])))
+        self.assertEqual(forward[ACCENT_START:], cap)
+        self.assertEqual(backward[ACCENT_START:], cap)
+        # Only the active region flipped; the foot stayed dark at the wire end.
+        self.assertEqual(backward[STATUS_START:ACCENT_START],
+                         list(reversed(forward[STATUS_START:ACCENT_START])))
+        self.assertEqual(forward[:STATUS_START], [[0, 0, 0]] * STATUS_START)
+        self.assertEqual(backward[:STATUS_START], [[0, 0, 0]] * STATUS_START)
 
     def test_compose_copies_rather_than_aliasing_its_inputs(self):
         cap = [[10, 10, 10]] * ACCENT_POSITIONS
         frame = compose_rope([[0, 0, 0]] * STATUS_POSITIONS, cap)
-        frame[STATUS_POSITIONS][0] = 99
+        frame[ACCENT_START][0] = 99
         self.assertEqual(cap[0], [10, 10, 10])
 
 
@@ -268,10 +275,10 @@ class MigrationTests(unittest.TestCase):
 
 class StudioAccentTests(Harness):
     def cap(self, node='node02'):
-        return self.studio.frames[node][STATUS_POSITIONS:]
+        return self.studio.frames[node][ACCENT_START:]
 
     def status(self, node='node02'):
-        return self.studio.frames[node][:STATUS_POSITIONS]
+        return self.studio.frames[node][STATUS_START:ACCENT_START]
 
     def set_accent(self, accent, index=None):
         config = self.studio.config()
@@ -320,7 +327,7 @@ class StudioAccentTests(Harness):
         self.tick(count=10)
         self.assertTrue(self.studio.events, 'expected a completion event')
         for node in NODES_ALL:
-            self.assertEqual(self.studio.frames[node][STATUS_POSITIONS:], expected, node)
+            self.assertEqual(self.studio.frames[node][ACCENT_START:], expected, node)
 
     def test_a_dark_wall_still_lights_the_cap(self):
         config = self.studio.config()
@@ -340,11 +347,11 @@ class StudioAccentTests(Harness):
         self.assertEqual(self.cap(), bright)
 
     # -- progress uses the status region only ---------------------------
-    def test_progress_maps_to_the_ninety_position_region(self):
+    def test_progress_maps_to_the_sixty_position_active_region(self):
         config = self.studio.config()
         config['settings']['reduced_motion'] = True
         self.studio.save(config)
-        for percent, expected in ((0, 0), (50, 45), (100, 90)):
+        for percent, expected in ((0, 0), (25, 15), (50, 30), (75, 45), (100, 60)):
             self.set('printer1', state='RUNNING', percent=percent)
             self.tick(count=2)
             filled = sum(1 for p in self.status() if is_water(p))
@@ -356,15 +363,16 @@ class StudioAccentTests(Harness):
         self.studio.save(config)
         self.set('printer1', state='RUNNING', percent=100)
         self.tick(count=2)
-        # Full progress fills exactly the status region, not 100 positions.
-        self.assertEqual(len(self.status()), 90)
+        # Full progress fills exactly the active region, not 100 positions.
+        self.assertEqual(len(self.status()), 60)
+        self.assertEqual(sum(1 for p in self.status() if is_water(p)), 60)
         self.assertEqual(self.cap(), render_accent(WHITE, 0, 0))
 
     # -- per rope versus all ropes --------------------------------------
     def test_each_rope_keeps_its_own_cap(self):
         self.set_accent(RAINBOW, index=0)
         self.tick(count=2)
-        self.assertEqual(self.studio.frames['node03'][STATUS_POSITIONS:],
+        self.assertEqual(self.studio.frames['node03'][ACCENT_START:],
                          render_accent(WHITE, 0, 1))
         self.assertNotEqual(self.cap(), render_accent(WHITE, 0, 0))
 
@@ -372,7 +380,7 @@ class StudioAccentTests(Harness):
         self.set_accent(RED)
         self.tick(count=2)
         for position, slot in enumerate(self.studio.config()['slots']):
-            self.assertEqual(self.studio.frames[slot['node']][STATUS_POSITIONS:],
+            self.assertEqual(self.studio.frames[slot['node']][ACCENT_START:],
                              render_accent(RED, 0, position))
 
     def test_swapping_printers_does_not_move_a_cap(self):
@@ -392,7 +400,7 @@ class StudioAccentTests(Harness):
         self.sent.clear()
         self.tick(seconds=0.125, count=int(seconds / 0.125))
         return [p for node, p in self.sent
-                if p.get('op') == 'range' and p.get('start') == STATUS_POSITIONS
+                if p.get('op') == 'range' and p.get('start') == ACCENT_START
                 and p.get('count') == ACCENT_POSITIONS]
 
     def test_a_static_cap_only_costs_its_periodic_resync(self):
@@ -425,7 +433,7 @@ class StudioAccentTests(Harness):
         self.tick(seconds=0.125, count=int(seconds / 0.125))
         per_node = {}
         for node, payload in self.sent:
-            if payload.get('op') == 'range' and payload.get('start') == STATUS_POSITIONS \
+            if payload.get('op') == 'range' and payload.get('start') == ACCENT_START \
                     and payload.get('count') == ACCENT_POSITIONS:
                 per_node[node] = per_node.get(node, 0) + 1
         self.assertTrue(per_node, 'the rainbow never repainted')
@@ -447,7 +455,9 @@ class StudioAccentTests(Harness):
         self.assertEqual(view['pixels'], PIXELS)
         self.assertEqual(view['status_positions'], STATUS_POSITIONS)
         self.assertEqual(view['accent_positions'], ACCENT_POSITIONS)
-        self.assertEqual(view['accent_start'], STATUS_POSITIONS)
+        self.assertEqual(view['accent_start'], ACCENT_START)
+        self.assertEqual(view['inactive_positions'], INACTIVE_POSITIONS)
+        self.assertEqual(view['status_start'], STATUS_START)
         for slot in view['config']['slots']:
             self.assertEqual(set(slot['accent']), set(DEFAULT_ACCENT))
 
@@ -455,7 +465,9 @@ class StudioAccentTests(Harness):
         self.set_accent(RED, index=1)
         self.tick()
         film = self.studio.live_film(frames=2, fps=4)
-        self.assertEqual(film['accent_start'], STATUS_POSITIONS)
+        self.assertEqual(film['accent_start'], ACCENT_START)
+        self.assertEqual(film['status_start'], STATUS_START)
+        self.assertEqual(film['inactive_positions'], INACTIVE_POSITIONS)
         self.assertEqual(film['accent_positions'], ACCENT_POSITIONS)
         self.assertEqual(film['bays'][1]['accent']['mode'], 'color')
         self.assertEqual(film['bays'][0]['accent']['mode'], 'white')
@@ -471,7 +483,7 @@ class StudioAccentTests(Harness):
         frame = []
         for count, index in film['ropes'][0][0]:
             frame.extend([list(palette[index])] * count)
-        self.assertEqual(frame[STATUS_POSITIONS:], render_accent(RED, 0, 0))
+        self.assertEqual(frame[ACCENT_START:], render_accent(RED, 0, 0))
 
     def test_the_lab_rejects_malformed_accent_and_direction_input(self):
         bays = [{'state': 'idle'}] * 7
@@ -494,7 +506,7 @@ class DefaultWallTests(unittest.TestCase):
                             clock=lambda: NOW)
             studio.tick()
             for position, slot in enumerate(studio.config()['slots']):
-                cap = studio.frames[slot['node']][STATUS_POSITIONS:]
+                cap = studio.frames[slot['node']][ACCENT_START:]
                 self.assertEqual(cap, render_accent(None, 0, position))
                 for pixel in cap:
                     self.assertEqual(len(set(pixel)), 1)

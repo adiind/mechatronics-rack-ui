@@ -10,6 +10,7 @@ Nothing here can reach a printer or the broker; it only calls the studio.
 """
 from __future__ import annotations
 
+import email.utils
 import hmac
 import ipaddress
 import json
@@ -24,6 +25,7 @@ from .layout import Conflict
 
 STATIC = Path(__file__).parent / 'static'
 FILES = {
+    '/customization.js': ('customization.js', 'text/javascript; charset=utf-8'),
     '/': ('index.html', 'text/html; charset=utf-8'),
     '/app.js': ('app.js', 'text/javascript; charset=utf-8'),
     '/style.css': ('style.css', 'text/css; charset=utf-8'),
@@ -34,7 +36,21 @@ FILES = {
     '/logs': ('logs.html', 'text/html; charset=utf-8'),
     '/logs.js': ('logs.js', 'text/javascript; charset=utf-8'),
     '/logs.css': ('logs.css', 'text/css; charset=utf-8'),
+    # Locally hosted OFL fonts (Poppins, IBM Plex Sans) with their licences.
+    '/fonts/Poppins-Regular.ttf': ('fonts/Poppins-Regular.ttf', 'font/ttf'),
+    '/fonts/Poppins-Medium.ttf': ('fonts/Poppins-Medium.ttf', 'font/ttf'),
+    '/fonts/Poppins-SemiBold.ttf': ('fonts/Poppins-SemiBold.ttf', 'font/ttf'),
+    '/fonts/Poppins-Bold.ttf': ('fonts/Poppins-Bold.ttf', 'font/ttf'),
+    '/fonts/IBMPlexSans-Variable.ttf': ('fonts/IBMPlexSans-Variable.ttf', 'font/ttf'),
+    '/fonts/IBMPlexSans-Italic-Variable.ttf': ('fonts/IBMPlexSans-Italic-Variable.ttf', 'font/ttf'),
+    '/fonts/OFL-Poppins.txt': ('fonts/OFL-Poppins.txt', 'text/plain; charset=utf-8'),
+    '/fonts/OFL-IBMPlexSans.txt': ('fonts/OFL-IBMPlexSans.txt', 'text/plain; charset=utf-8'),
 }
+
+#: The only image route: /media/camera/<printer alias>.jpg. The alias must be
+#: one of the wall's printers (checked again by the studio), so there is no
+#: path, no filename and no URL parameter anywhere in this server.
+CAMERA_ROUTE = re.compile(r'^/media/camera/(printer[1-9][0-9]?)\.jpg$')
 
 MAX_BODY = 32768
 TAILNET = ipaddress.ip_network('100.64.0.0/10')
@@ -76,7 +92,7 @@ def make_server(studio, host, port):
                     and self.headers.get('Origin') == self.origin()
                     and hmac.compare_digest(token, csrf))
 
-        def reply(self, code, value, mime='application/json'):
+        def reply(self, code, value, mime='application/json', cache='no-store', extra=()):
             if mime == 'application/json':
                 body = json.dumps(value, allow_nan=False).encode()
             else:
@@ -84,7 +100,9 @@ def make_server(studio, host, port):
             self.send_response(code)
             self.send_header('Content-Type', mime)
             self.send_header('Content-Length', str(len(body)))
-            self.send_header('Cache-Control', 'no-store')
+            self.send_header('Cache-Control', cache)
+            for name, value in extra:
+                self.send_header(name, value)
             self.send_header('X-Content-Type-Options', 'nosniff')
             self.send_header('Referrer-Policy', 'no-referrer')
             self.send_header('Content-Security-Policy', CSP)
@@ -144,6 +162,27 @@ def make_server(studio, host, port):
                                                        limit=limit, raw=raw))
                 except (ValueError, TypeError):
                     return self.reply(400, {'error': 'Invalid logs request'})
+            if path == '/api/media':
+                # Read-only descriptions of the cached camera images, keyed by
+                # printer identity. Never triggers a capture.
+                return self.reply(200, studio.media())
+            camera = CAMERA_ROUTE.match(path)
+            if camera:
+                try:
+                    data, mtime = studio.camera_image(camera.group(1))
+                except LookupError:
+                    return self.reply(404, {'error': 'No cached camera image'})
+                except ValueError:
+                    return self.reply(415, {'error': 'Cached camera image is not servable'})
+                except OSError:
+                    # The file vanished or became unreadable between the check
+                    # and the read: answer, never drop the connection.
+                    return self.reply(404, {'error': 'No cached camera image'})
+                stamp = email.utils.formatdate(mtime, usegmt=True) if mtime else None
+                extra = [('ETag', f'"{int(mtime or 0)}-{len(data)}"')]
+                if stamp:
+                    extra.append(('Last-Modified', stamp))
+                return self.reply(200, data, 'image/jpeg', cache='private, max-age=15', extra=extra)
             if path == '/api/film':
                 try:
                     frames = int(query.get('frames', ['10'])[0])
@@ -157,9 +196,13 @@ def make_server(studio, host, port):
             if path in FILES:
                 name, mime = FILES[path]
                 try:
-                    return self.reply(200, (STATIC / name).read_bytes(), mime)
+                    body = (STATIC / name).read_bytes()
                 except OSError:
                     return self.reply(404, {'error': 'Not found'})
+                # Fonts never change between releases; everything else is
+                # read fresh so an edit shows on reload.
+                cache = 'public, max-age=86400' if path.startswith('/fonts/') else 'no-store'
+                return self.reply(200, body, mime, cache=cache)
             self.reply(404, {'error': 'Not found'})
 
         def do_POST(self):
